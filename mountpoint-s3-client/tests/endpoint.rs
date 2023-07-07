@@ -117,9 +117,9 @@ async fn run_access_points<F: FnOnce(&str) -> Endpoint>(f: F) {
         .await
         .unwrap();
 
-        let region = get_test_region();
-        let endpoint = f(&region);
-        let config = S3ClientConfig::new().endpoint(endpoint);
+    let region = get_test_region();
+    let endpoint = f(&region);
+    let config = S3ClientConfig::new().endpoint(endpoint);
     let client = S3CrtClient::new(&region, config).expect("could not create test client");
 
     let result = client
@@ -165,7 +165,6 @@ async fn test_multi_region_access_point_alias(addressing_style: AddressingStyle)
 
 #[test_case(AddressingStyle::Automatic)]
 #[test_case(AddressingStyle::Virtual)]
-//#[test_case(AddressingStyle::Path)]
 #[tokio::test]
 async fn test_object_lambda_access_point_alias(addressing_style: AddressingStyle) {
     run_other_access_points(
