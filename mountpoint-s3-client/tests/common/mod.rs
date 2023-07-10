@@ -23,6 +23,13 @@ pub enum AccessPointType {
     MultiRegion,
 }
 
+fn get_test_prefix() -> String {
+    // Prefix always has a trailing "/" to keep meaning in sync with the S3 API.
+    let prefix = std::env::var("S3_BUCKET_TEST_PREFIX").unwrap_or(String::from("mountpoint-test/"));
+    assert!(prefix.ends_with('/'), "S3_BUCKET_TEST_PREFIX should end in '/'");
+    prefix
+}
+
 pub fn get_test_client() -> S3CrtClient {
     S3CrtClient::new(&get_test_region(), S3ClientConfig::new()).expect("could not create test client")
 }
@@ -33,9 +40,7 @@ pub fn get_test_bucket_and_prefix(test_name: &str) -> (String, String) {
     // Generate a random nonce to make sure this prefix is truly unique
     let nonce = OsRng.next_u64();
 
-    // Prefix always has a trailing "/" to keep meaning in sync with the S3 API.
-    let prefix = std::env::var("S3_BUCKET_TEST_PREFIX").unwrap_or(String::from("mountpoint-test/"));
-    assert!(prefix.ends_with('/'), "S3_BUCKET_TEST_PREFIX should end in '/'");
+    let prefix = get_test_prefix();
 
     let prefix = format!("{prefix}{test_name}/{nonce}/");
 
@@ -74,10 +79,7 @@ pub fn get_test_access_point_alias_and_prefix(test_name: &str, access_point_type
     // Generate a random nonce to make sure this prefix is truly unique
     let nonce = OsRng.next_u64();
 
-    // Prefix always has a trailing "/" to keep meaning in sync with the S3 API.
-    let prefix =
-        std::env::var("S3_BUCKET_TEST_PREFIX").expect("Set S3_ACCESS_POINT_TEST_PREFIX to run integration tests");
-    assert!(prefix.ends_with('/'), "S3_BUCKET_TEST_PREFIX should end in '/'");
+    let prefix = get_test_prefix();
 
     let prefix = format!("{prefix}{test_name}/{nonce}/");
 
