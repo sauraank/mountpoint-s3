@@ -151,7 +151,6 @@ async fn run_other_access_points<F: FnOnce(&str) -> Endpoint>(f: F, access_point
 
 // Multi-Region Access Point does not work with Path Style addressing
 // Since, MRAP alias has a '.' in it, it is not valid DNS name. So, Automatic addressing style redirect to Path style.
-// TODO: Add the path style when Complete endpoint resolution is done using resolver.
 #[test_case(AddressingStyle::Virtual)]
 #[tokio::test]
 async fn test_multi_region_access_point_alias(addressing_style: AddressingStyle) {
