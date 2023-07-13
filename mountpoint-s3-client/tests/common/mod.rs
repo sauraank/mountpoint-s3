@@ -135,7 +135,7 @@ macro_rules! object_client_test {
         mod $test_fn_identifier {
             use super::$test_fn_identifier;
             use mountpoint_s3_client::mock_client::{MockClient, MockClientConfig};
-            use $crate::{get_test_bucket_and_prefix, get_test_client};
+            use $crate::{get_test_bucket_and_prefix, get_test_client, get_test_endpoint_config};
 
             #[tokio::test]
             async fn mock() {
@@ -152,8 +152,7 @@ macro_rules! object_client_test {
             #[tokio::test]
             async fn rust_crt() {
                 let (bucket, prefix) = get_test_bucket_and_prefix(stringify!($test_fn_identifier));
-                let endpoint_config = get_test_endpoint_config();
-                let client = get_test_client(endpoint_config);
+                let client = get_test_client(get_test_endpoint_config());
 
                 $test_fn_identifier(&client, &bucket, &prefix).await;
             }

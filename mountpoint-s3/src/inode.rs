@@ -75,11 +75,12 @@ struct SuperblockInner {
     next_ino: AtomicU64,
     mount_time: OffsetDateTime,
     cache_config: CacheConfig,
+    endpoint_config: EndpointConfig,
 }
 
 impl Superblock {
     /// Create a new Superblock that targets the given bucket/prefix
-    pub fn new(bucket: &str, prefix: &Prefix, cache_config: CacheConfig) -> Self {
+    pub fn new(bucket: &str, prefix: &Prefix, cache_config: CacheConfig, endpoint_config: EndpointConfig) -> Self {
         let mount_time = OffsetDateTime::now_utc();
 
         let root = InodeInner {
@@ -108,6 +109,7 @@ impl Superblock {
             next_ino: AtomicU64::new(2),
             mount_time,
             cache_config,
+            endpoint_config,
         };
         Self { inner: Arc::new(inner) }
     }
@@ -334,7 +336,6 @@ impl Superblock {
         client: &OC,
         parent_ino: InodeNo,
         name: &OsStr,
-        endpoint_config: EndpointConfig,
     ) -> Result<(), InodeError> {
         let parent = self.inner.get(parent_ino)?;
         let LookedUp { inode, .. } = self.inner.lookup(client, parent_ino, name).await?;
@@ -361,7 +362,7 @@ impl Superblock {
             WriteStatus::Remote => {
                 let (bucket, s3_key) = (self.inner.bucket.as_str(), inode.full_key());
                 debug!(parent=?parent_ino, ?name, "unlink on remote file will delete key {}", s3_key);
-                let delete_obj_result = client.delete_object(bucket, s3_key, endpoint_config).await;
+                let delete_obj_result = client.delete_object(bucket, s3_key, self.inner.endpoint_config.clone()).await;
 
                 match delete_obj_result {
                     Ok(_res) => (),
@@ -436,7 +437,6 @@ impl SuperblockInner {
         client: &OC,
         parent_ino: InodeNo,
         name: &OsStr,
-        endpoint_config: EndpointConfig,
     ) -> Result<LookedUp, InodeError> {
         let name = name
             .to_str()
@@ -450,7 +450,7 @@ impl SuperblockInner {
 
         // TODO use caches. if we already know about this name, we just need to revalidate the stat
         // cache and then read it.
-        let remote = self.remote_lookup(client, parent_ino, name, endpoint_config).await?;
+        let remote = self.remote_lookup(client, parent_ino, name).await?;
         self.update_from_remote(parent_ino, name, remote)
     }
 
@@ -461,7 +461,6 @@ impl SuperblockInner {
         client: &OC,
         parent_ino: InodeNo,
         name: &str,
-        endpoint_config: EndpointConfig,
     ) -> Result<Option<RemoteLookup>, InodeError> {
         let parent = self.get(parent_ino)?;
         if parent.kind() != InodeKind::Directory {
@@ -498,9 +497,11 @@ impl SuperblockInner {
         //       "/" to the prefix in the request, the first common prefix we'll get back will be
         //       "dir-1/", because that precedes "dir/" in lexicographic order. Doing the
         //       ListObjects with "/" appended makes sure we always observe the correct prefix.
-        let mut file_lookup = client.head_object(&self.bucket, &full_path, endpoint_config).fuse();
+        let mut file_lookup = client
+            .head_object(&self.bucket, &full_path, self.endpoint_config.clone())
+            .fuse();
         let mut dir_lookup = client
-            .list_objects(&self.bucket, None, "/", 1, &full_path_suffixed, endpoint_config)
+            .list_objects(&self.bucket, None, "/", 1, &full_path_suffixed, self.endpoint_config.clone())
             .fuse();
 
         let mut file_state = None;
@@ -1214,7 +1215,7 @@ mod tests {
 
         let prefix = Prefix::new(prefix).expect("valid prefix");
         let ts = OffsetDateTime::now_utc();
-        let superblock = Superblock::new(bucket, &prefix, Default::default());
+        let superblock = Superblock::new(bucket, &prefix, Default::default(), Default::default());
 
         // Try it twice to test the inode reuse path too
         for _ in 0..2 {
@@ -1273,7 +1274,7 @@ mod tests {
                         .expect("inode should exist");
                     // Grab last modified time according to mock S3
                     let modified_time = client
-                        .head_object(bucket, file.inode.full_key())
+                        .head_object(bucket, file.inode.full_key(), Default::default())
                         .await
                         .expect("object should exist")
                         .object
@@ -1290,7 +1291,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_forget() {
-        let superblock = Superblock::new("test_bucket", &Default::default(), Default::default());
+        let superblock = Superblock::new(
+            "test_bucket",
+            &Default::default(),
+            Default::default(),
+            Default::default(),
+        );
         let ino = 42;
         let inode_name = "made-up-inode";
         let inode = Inode {
@@ -1344,7 +1350,12 @@ mod tests {
         let name = "foo";
         client.add_object(name, b"foo".into());
 
-        let superblock = Superblock::new("test_bucket", &Default::default(), Default::default());
+        let superblock = Superblock::new(
+            "test_bucket",
+            &Default::default(),
+            Default::default(),
+            Default::default(),
+        );
 
         let lookup = superblock.lookup(&client, ROOT_INODE_NO, name.as_ref()).await.unwrap();
         let lookup_count = lookup.inode.inner.sync.read().unwrap().lookup_count;
@@ -1399,7 +1410,7 @@ mod tests {
 
         let prefix = Prefix::new(prefix).expect("valid prefix");
         let ts = OffsetDateTime::now_utc();
-        let superblock = Superblock::new("test_bucket", &prefix, Default::default());
+        let superblock = Superblock::new("test_bucket", &prefix, Default::default(), Default::default());
 
         // Try it all twice to test inode reuse
         for _ in 0..2 {
@@ -1450,7 +1461,7 @@ mod tests {
         let client = Arc::new(MockClient::new(client_config));
 
         let prefix = Prefix::new(prefix).expect("valid prefix");
-        let superblock = Superblock::new("test_bucket", &prefix, Default::default());
+        let superblock = Superblock::new("test_bucket", &prefix, Default::default(), Default::default());
 
         let mut expected_list = Vec::new();
 
@@ -1495,7 +1506,7 @@ mod tests {
         let client = Arc::new(MockClient::new(client_config));
 
         let prefix = Prefix::new(prefix).expect("valid prefix");
-        let superblock = Superblock::new("test_bucket", &prefix, Default::default());
+        let superblock = Superblock::new("test_bucket", &prefix, Default::default(), Default::default());
 
         let mut expected_list = Vec::new();
 
@@ -1550,7 +1561,7 @@ mod tests {
         };
         let client = Arc::new(MockClient::new(client_config));
         let prefix = Prefix::new(prefix).expect("valid prefix");
-        let superblock = Superblock::new("test_bucket", &prefix, Default::default());
+        let superblock = Superblock::new("test_bucket", &prefix, Default::default(), Default::default());
 
         // Create local directory
         let dirname = "local_dir";
@@ -1594,7 +1605,7 @@ mod tests {
         };
         let client = Arc::new(MockClient::new(client_config));
         let prefix = Prefix::new(prefix).expect("valid prefix");
-        let superblock = Superblock::new("test_bucket", &prefix, Default::default());
+        let superblock = Superblock::new("test_bucket", &prefix, Default::default(), Default::default());
 
         // Create local directory
         let dirname = "local_dir";
@@ -1634,7 +1645,7 @@ mod tests {
         };
         let client = Arc::new(MockClient::new(client_config));
         let prefix = Prefix::new(prefix).expect("valid prefix");
-        let superblock = Superblock::new("test_bucket", &prefix, Default::default());
+        let superblock = Superblock::new("test_bucket", &prefix, Default::default(), Default::default());
 
         // Create local directory
         let dirname = "local_dir";
@@ -1679,7 +1690,7 @@ mod tests {
         };
         let client = Arc::new(MockClient::new(client_config));
         let prefix = Prefix::new(prefix).expect("valid prefix");
-        let superblock = Superblock::new("test_bucket", &prefix, Default::default());
+        let superblock = Superblock::new("test_bucket", &prefix, Default::default(), Default::default());
 
         // Create local directory
         let dirname = "local_dir";
@@ -1718,7 +1729,7 @@ mod tests {
         };
         let client = Arc::new(MockClient::new(client_config));
         let prefix = Prefix::new(prefix).expect("valid prefix");
-        let superblock = Superblock::new("test_bucket", &prefix, Default::default());
+        let superblock = Superblock::new("test_bucket", &prefix, Default::default(), Default::default());
 
         let file_name = "file.txt";
         let file_key = format!("{prefix}{file_name}");
@@ -1750,7 +1761,12 @@ mod tests {
             part_size: 1024 * 1024,
         };
         let client = Arc::new(MockClient::new(client_config));
-        let superblock = Superblock::new("test_bucket", &Default::default(), Default::default());
+        let superblock = Superblock::new(
+            "test_bucket",
+            &Default::default(),
+            Default::default(),
+            Default::default(),
+        );
 
         let nested_dirs = (0..5).map(|i| format!("level{i}")).collect::<Vec<_>>();
         let leaf_dir_ino = {
@@ -1811,7 +1827,12 @@ mod tests {
         let client = Arc::new(MockClient::new(client_config));
         client.add_object("dir1/file1.txt", MockObject::constant(0xaa, 30, ETag::for_tests()));
 
-        let superblock = Superblock::new("test_bucket", &Default::default(), Default::default());
+        let superblock = Superblock::new(
+            "test_bucket",
+            &Default::default(),
+            Default::default(),
+            Default::default(),
+        );
 
         for _ in 0..2 {
             let dir1_1 = superblock
@@ -1859,7 +1880,12 @@ mod tests {
             MockObject::constant(0xaa, 30, ETag::for_tests()),
         );
 
-        let superblock = Superblock::new("test_bucket", &Default::default(), Default::default());
+        let superblock = Superblock::new(
+            "test_bucket",
+            &Default::default(),
+            Default::default(),
+            Default::default(),
+        );
 
         let dir_handle = superblock.readdir(&client, FUSE_ROOT_INODE, 2).await.unwrap();
         let entries = dir_handle.collect(&client).await.unwrap();
@@ -1906,7 +1932,12 @@ mod tests {
             MockObject::constant(0xaa, 30, ETag::from_str("test_etag_5").unwrap()),
         );
 
-        let superblock = Superblock::new("test_bucket", &Default::default(), Default::default());
+        let superblock = Superblock::new(
+            "test_bucket",
+            &Default::default(),
+            Default::default(),
+            Default::default(),
+        );
         let dir_handle = superblock.readdir(&client, FUSE_ROOT_INODE, 2).await.unwrap();
         let entries = dir_handle.collect(&client).await.unwrap();
         assert_eq!(

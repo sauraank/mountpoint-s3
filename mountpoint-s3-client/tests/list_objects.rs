@@ -11,10 +11,11 @@ async fn test_list_objects() {
     let (bucket, prefix) = get_test_bucket_and_prefix("test_list_objects");
     create_objects_for_test(&sdk_client, &bucket, &prefix, &["hello", "dir/a", "dir/b"]).await;
 
-    let client: S3CrtClient = get_test_client();
+    let endpoint_config = get_test_endpoint_config();
+    let client: S3CrtClient = get_test_client(endpoint_config.clone());
 
     let result = client
-        .list_objects(&bucket, None, "/", 1000, &prefix)
+        .list_objects(&bucket, None, "/", 1000, &prefix, endpoint_config)
         .await
         .expect("ListObjects failed");
 
@@ -43,7 +44,8 @@ async fn test_max_keys_continuation_token() {
     let keys: Vec<String> = (0..TOTAL_KEYS).map(|i| format!("object_{i}")).collect();
     create_objects_for_test(&sdk_client, &bucket, &prefix, &keys[..]).await;
 
-    let client: S3CrtClient = get_test_client();
+    let endpoint_config = get_test_endpoint_config();
+    let client: S3CrtClient = get_test_client(endpoint_config.clone());
 
     let mut continuation_token: Option<String> = None;
     let mut keys_left = TOTAL_KEYS;
@@ -58,6 +60,7 @@ async fn test_max_keys_continuation_token() {
                 "/",
                 MAX_KEYS_PER_REQUEST,
                 &prefix,
+                endpoint_config.clone(),
             )
             .await
             .expect("ListObjects failed");
@@ -92,12 +95,13 @@ async fn test_max_keys_continuation_token() {
 async fn test_invalid_list_objects() {
     let (bucket, prefix) = get_test_bucket_and_prefix("test_invalid_list_objects");
 
-    let client: S3CrtClient = get_test_client();
+    let endpoint_config = get_test_endpoint_config();
+    let client: S3CrtClient = get_test_client(endpoint_config.clone());
 
     // Make a ListObjects request using some made-up continuation token.
     let continuation_token = Some("Made-up invalid token here");
     let result = client
-        .list_objects(&bucket, continuation_token, "/", 1000, &prefix)
+        .list_objects(&bucket, continuation_token, "/", 1000, &prefix, endpoint_config)
         .await;
 
     let err = result.expect_err("this request should have failed: we made up an invalid continuation token");
@@ -108,10 +112,10 @@ async fn test_invalid_list_objects() {
 async fn test_list_objects_404_bucket() {
     let (_bucket, prefix) = get_test_bucket_and_prefix("test_list_objects_404_bucket");
 
-    let client: S3CrtClient = get_test_client();
-
+    let endpoint_config = get_test_endpoint_config();
+    let client: S3CrtClient = get_test_client(endpoint_config.clone());
     let result = client
-        .list_objects("DOC-EXAMPLE-BUCKET", None, "/", 1000, &prefix)
+        .list_objects("DOC-EXAMPLE-BUCKET", None, "/", 1000, &prefix, endpoint_config)
         .await;
     assert!(matches!(
         result,
@@ -132,17 +136,25 @@ async fn test_interesting_keys() {
     let (bucket, prefix) = get_test_bucket_and_prefix("test_list_objects");
     create_objects_for_test(&sdk_client, &bucket, &prefix, keys).await;
 
-    let client: S3CrtClient = get_test_client();
+    let endpoint_config = get_test_endpoint_config();
+    let client: S3CrtClient = get_test_client(endpoint_config.clone());
 
     let result = client
-        .list_objects(&bucket, None, "/", 2, &prefix)
+        .list_objects(&bucket, None, "/", 2, &prefix, endpoint_config.clone())
         .await
         .expect("ListObjects failed");
     assert_eq!(result.common_prefixes[0], format!("{prefix}{}/", keys[0]));
     assert_eq!(result.objects[0].key, format!("{prefix}{}", keys[0]));
 
     let result = client
-        .list_objects(&bucket, None, "/", 1, &format!("{prefix}{}/", keys[0]))
+        .list_objects(
+            &bucket,
+            None,
+            "/",
+            1,
+            &format!("{prefix}{}/", keys[0]),
+            endpoint_config.clone(),
+        )
         .await
         .expect("ListObjects failed");
     assert_eq!(result.objects.len(), 1);
@@ -156,6 +168,7 @@ async fn test_interesting_keys() {
             "/",
             1000,
             &format!("{prefix}{}/", keys[0]),
+            endpoint_config,
         )
         .await
         .expect("ListObjects failed");

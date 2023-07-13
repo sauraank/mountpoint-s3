@@ -3,23 +3,31 @@
 pub mod common;
 
 use common::*;
-use mountpoint_s3_client::{HeadBucketError, ObjectClientError, S3CrtClient};
+use mountpoint_s3_client::{EndpointConfig, HeadBucketError, ObjectClientError, S3ClientConfig, S3CrtClient};
 
 #[tokio::test]
 async fn test_head_bucket_correct_region() {
-    let client = get_test_client();
+    let endpoint_config = get_test_endpoint_config();
+    let client: S3CrtClient = get_test_client(endpoint_config.clone());
     let (bucket, _) = get_test_bucket_and_prefix("test_head_bucket_correct_region");
 
-    client.head_bucket(&bucket).await.expect("HeadBucket failed");
+    client
+        .head_bucket(&bucket, endpoint_config)
+        .await
+        .expect("HeadBucket failed");
 }
 
 #[tokio::test]
 async fn test_head_bucket_wrong_region() {
-    let client = S3CrtClient::new("ap-southeast-2", Default::default()).expect("could not create test client");
+    let endpoint_config = EndpointConfig::new().region("ap-southeast-2");
+    let client =
+        S3CrtClient::new(S3ClientConfig::new().endpoint_config(endpoint_config)).expect("could not create test client");
     let (bucket, _) = get_test_bucket_and_prefix("test_head_bucket_wrong_region");
     let expected_region = get_test_region();
 
-    let result = client.head_bucket(&bucket).await;
+    let result = client
+        .head_bucket(&bucket, EndpointConfig::new().region(&expected_region))
+        .await;
 
     match result {
         Err(ObjectClientError::ServiceError(HeadBucketError::IncorrectRegion(actual_region))) => {
@@ -31,10 +39,11 @@ async fn test_head_bucket_wrong_region() {
 
 #[tokio::test]
 async fn test_head_bucket_forbidden() {
-    let client = get_test_client();
+    let endpoint_config = get_test_endpoint_config();
+    let client: S3CrtClient = get_test_client(endpoint_config.clone());
     let bucket = get_test_bucket_without_permissions();
 
-    let result = client.head_bucket(&bucket).await;
+    let result = client.head_bucket(&bucket, endpoint_config).await;
 
     assert!(matches!(
         result,
@@ -44,11 +53,12 @@ async fn test_head_bucket_forbidden() {
 
 #[tokio::test]
 async fn test_head_bucket_not_found() {
-    let client = get_test_client();
+    let endpoint_config = get_test_endpoint_config();
+    let client: S3CrtClient = get_test_client(endpoint_config.clone());
     // Buckets are case sensitive. This bucket will use path-style access and 404.
     let bucket = "DOC-EXAMPLE-BUCKET";
 
-    let result = client.head_bucket(bucket).await;
+    let result = client.head_bucket(bucket, endpoint_config).await;
 
     assert!(matches!(
         result,

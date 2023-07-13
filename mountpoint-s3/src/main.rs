@@ -491,7 +491,7 @@ fn mount(args: CliArgs) -> anyhow::Result<FuseSession> {
     }
 
     let bucket_name = args.bucket_name;
-    let client = create_client_for_bucket(&bucket_name, &endpoint_config, client_config)
+    let client = create_client_for_bucket(&bucket_name, endpoint_config.clone(), client_config)
         .context("Failed to create S3 client")?;
     let runtime = client.event_loop_group();
 
@@ -511,7 +511,14 @@ fn mount(args: CliArgs) -> anyhow::Result<FuseSession> {
     filesystem_config.prefetcher_config.part_alignment = args.part_size as usize;
 
     let prefix = args.prefix.unwrap_or_default();
-    let fs = S3FuseFilesystem::new(client, runtime, &args.bucket_name, &prefix, filesystem_config);
+    let fs = S3FuseFilesystem::new(
+        client,
+        runtime,
+        &args.bucket_name,
+        &prefix,
+        filesystem_config,
+        endpoint_config.clone(),
+    );
 
     let fs_name = String::from("mountpoint-s3");
     let mut options = vec![

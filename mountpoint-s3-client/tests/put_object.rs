@@ -27,7 +27,7 @@ async fn test_put_object(client: &impl ObjectClient, bucket: &str, prefix: &str)
     rng.fill(&mut contents[..]);
 
     let mut request = client
-        .put_object(bucket, &key, &Default::default())
+        .put_object(bucket, &key, &Default::default(), Default::default())
         .await
         .expect("put_object should succeed");
 
@@ -35,7 +35,7 @@ async fn test_put_object(client: &impl ObjectClient, bucket: &str, prefix: &str)
     request.complete().await.unwrap();
 
     let result = client
-        .get_object(bucket, &key, None, None)
+        .get_object(bucket, &key, None, None, Default::default())
         .await
         .expect("get_object should succeed");
     check_get_result(result, None, &contents[..]).await;
@@ -49,14 +49,14 @@ async fn test_put_object_empty(client: &impl ObjectClient, bucket: &str, prefix:
     let key = format!("{prefix}hello");
 
     let request = client
-        .put_object(bucket, &key, &Default::default())
+        .put_object(bucket, &key, &Default::default(), Default::default())
         .await
         .expect("put_object should succeed");
 
     request.complete().await.unwrap();
 
     let result = client
-        .get_object(bucket, &key, None, None)
+        .get_object(bucket, &key, None, None, Default::default())
         .await
         .expect("get_object should succeed");
     check_get_result(result, None, &[]).await;
@@ -75,7 +75,7 @@ async fn test_put_object_multi_part(client: &impl ObjectClient, bucket: &str, pr
     rng.fill(&mut contents[..]);
 
     let mut request = client
-        .put_object(bucket, &key, &Default::default())
+        .put_object(bucket, &key, &Default::default(), Default::default())
         .await
         .expect("put_object failed");
 
@@ -86,7 +86,7 @@ async fn test_put_object_multi_part(client: &impl ObjectClient, bucket: &str, pr
     request.complete().await.unwrap();
 
     let result = client
-        .get_object(bucket, &key, None, None)
+        .get_object(bucket, &key, None, None, Default::default())
         .await
         .expect("get_object failed");
     check_get_result(result, None, &contents[..]).await;
@@ -108,7 +108,7 @@ async fn test_put_object_large(client: &impl ObjectClient, bucket: &str, prefix:
     rng.fill(&mut contents[..]);
 
     let mut request = client
-        .put_object(bucket, &key, &Default::default())
+        .put_object(bucket, &key, &Default::default(), Default::default())
         .await
         .expect("put_object failed");
 
@@ -118,7 +118,7 @@ async fn test_put_object_large(client: &impl ObjectClient, bucket: &str, prefix:
     request.complete().await.unwrap();
 
     let result = client
-        .get_object(bucket, &key, None, None)
+        .get_object(bucket, &key, None, None, Default::default())
         .await
         .expect("get_object failed");
     check_get_result(result, None, &contents[..]).await;
@@ -136,7 +136,7 @@ async fn test_put_object_dropped(client: &impl ObjectClient, bucket: &str, prefi
     rng.fill(&mut contents[..]);
 
     let mut request = client
-        .put_object(bucket, &key, &Default::default())
+        .put_object(bucket, &key, &Default::default(), Default::default())
         .await
         .expect("put_object should succeed");
 
@@ -148,7 +148,7 @@ async fn test_put_object_dropped(client: &impl ObjectClient, bucket: &str, prefi
         bucket: &str,
         key: &str,
     ) -> ObjectClientResult<(), GetObjectError, Client::ClientError> {
-        let result = client.get_object(bucket, key, None, None).await?;
+        let result = client.get_object(bucket, key, None, None, Default::default()).await?;
         pin_mut!(result);
         result.next().await.unwrap()?;
         Ok(())
@@ -164,7 +164,8 @@ object_client_test!(test_put_object_dropped);
 #[tokio::test]
 async fn test_put_object_abort() {
     let (bucket, prefix) = get_test_bucket_and_prefix("test_put_object_abort");
-    let client = get_test_client();
+    let endpoint_config = get_test_endpoint_config();
+    let client: S3CrtClient = get_test_client(endpoint_config.clone());
     let key = format!("{prefix}hello");
 
     let mut rng = rand::thread_rng();
@@ -172,7 +173,7 @@ async fn test_put_object_abort() {
     rng.fill(&mut contents[..]);
 
     let mut request = client
-        .put_object(&bucket, &key, &Default::default())
+        .put_object(&bucket, &key, &Default::default(), endpoint_config)
         .await
         .expect("put_object should succeed");
 
@@ -195,8 +196,11 @@ async fn test_put_object_abort() {
 async fn test_put_checksums() {
     const PART_SIZE: usize = 5 * 1024 * 1024;
     let (bucket, prefix) = get_test_bucket_and_prefix("test_put_checksums");
-    let client_config = S3ClientConfig::new().part_size(PART_SIZE);
-    let client = S3CrtClient::new(&get_test_region(), client_config).expect("could not create test client");
+    let endpoint_config = get_test_endpoint_config();
+    let client_config = S3ClientConfig::new()
+        .part_size(PART_SIZE)
+        .endpoint_config(endpoint_config.clone());
+    let client = S3CrtClient::new(client_config).expect("could not create test client");
     let key = format!("{prefix}hello");
 
     let mut rng = rand::thread_rng();
@@ -205,7 +209,7 @@ async fn test_put_checksums() {
 
     let params = PutObjectParams::new().trailing_checksums(true);
     let mut request = client
-        .put_object(&bucket, &key, &params)
+        .put_object(&bucket, &key, &params, endpoint_config)
         .await
         .expect("put_object should succeed");
 

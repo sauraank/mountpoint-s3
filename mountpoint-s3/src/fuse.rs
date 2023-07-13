@@ -11,7 +11,7 @@ use crate::prefix::Prefix;
 use fuser::{
     FileAttr, Filesystem, KernelConfig, ReplyAttr, ReplyData, ReplyEmpty, ReplyEntry, ReplyOpen, ReplyWrite, Request,
 };
-use mountpoint_s3_client::ObjectClient;
+use mountpoint_s3_client::{EndpointConfig, ObjectClient};
 
 pub mod session;
 
@@ -26,8 +26,15 @@ where
     Client: ObjectClient + Send + Sync + 'static,
     Runtime: Spawn + Send + Sync,
 {
-    pub fn new(client: Client, runtime: Runtime, bucket: &str, prefix: &Prefix, config: S3FilesystemConfig) -> Self {
-        let fs = S3Filesystem::new(client, runtime, bucket, prefix, config);
+    pub fn new(
+        client: Client,
+        runtime: Runtime,
+        bucket: &str,
+        prefix: &Prefix,
+        config: S3FilesystemConfig,
+        endpoint_config: EndpointConfig,
+    ) -> Self {
+        let fs = S3Filesystem::new(client, runtime, bucket, prefix, config, endpoint_config);
 
         Self { fs }
     }
@@ -66,7 +73,7 @@ where
 
     #[instrument(level="debug", skip_all, fields(req=_req.unique(), ino=ino))]
     fn open(&self, _req: &Request<'_>, ino: InodeNo, flags: i32, reply: ReplyOpen) {
-        match block_on(self.fs.open(ino, flags).in_current_span()) {
+        match block_on(self.fs.open(ino, flags, ).in_current_span()) {
             Ok(opened) => reply.opened(opened.fh, opened.flags),
             Err(e) => reply.error(e),
         }

@@ -9,7 +9,7 @@ use std::time::{Duration, UNIX_EPOCH};
 use tracing::{debug, error, trace, warn};
 
 use fuser::{FileAttr, KernelConfig};
-use mountpoint_s3_client::{ETag, ObjectClient};
+use mountpoint_s3_client::{ETag, EndpointConfig, ObjectClient};
 
 use crate::inode::{Inode, InodeError, InodeKind, LookedUp, ReaddirHandle, Superblock, WriteHandle};
 use crate::prefetch::checksummed_bytes::IntegrityError;
@@ -214,8 +214,15 @@ where
     Client: ObjectClient + Send + Sync + 'static,
     Runtime: Spawn + Send + Sync,
 {
-    pub fn new(client: Client, runtime: Runtime, bucket: &str, prefix: &Prefix, config: S3FilesystemConfig) -> Self {
-        let superblock = Superblock::new(bucket, prefix, config.cache_config.clone());
+    pub fn new(
+        client: Client,
+        runtime: Runtime,
+        bucket: &str,
+        prefix: &Prefix,
+        config: S3FilesystemConfig,
+        endpoint_config: EndpointConfig,
+    ) -> Self {
+        let superblock = Superblock::new(bucket, prefix, config.cache_config.clone(), endpoint_config);
 
         let client = Arc::new(client);
 
@@ -364,7 +371,7 @@ where
         self.superblock.forget(ino, n);
     }
 
-    pub async fn open(&self, ino: InodeNo, flags: i32) -> Result<Opened, libc::c_int> {
+    pub async fn open(&self, ino: InodeNo, flags: i32, endpoint_config: EndpointConfig) -> Result<Opened, libc::c_int> {
         trace!("fs:open with ino {:?} flags {:?}", ino, flags);
 
         let lookup = self.superblock.getattr(&self.client, ino, true).await?;
@@ -393,7 +400,7 @@ where
                 }
             };
             let key = lookup.inode.full_key();
-            match self.uploader.put(&self.bucket, key).await {
+            match self.uploader.put(&self.bucket, key, endpoint_config).await {
                 Err(e) => {
                     error!(key, "put failed to start: {e:?}");
                     return Err(libc::EIO);
@@ -438,6 +445,7 @@ where
         _flags: i32,
         _lock: Option<u64>,
         reply: R,
+        endpoint_config: EndpointConfig,
     ) -> R::Replied {
         trace!(
             "fs:read with ino {:?} fh {:?} offset {:?} size {:?}",
@@ -466,7 +474,7 @@ where
         if request.is_none() {
             *request = Some(
                 self.prefetcher
-                    .get(&self.bucket, &handle.full_key, handle.object_size, file_etag),
+                    .get(&self.bucket, &handle.full_key, handle.object_size, file_etag, endpoint_config),
             );
         }
 
