@@ -1,8 +1,8 @@
 use std::{fmt::Debug, sync::Arc};
 
 use mountpoint_s3_client::{
-    ObjectClient, ObjectClientError, ObjectClientResult, PutObjectError, PutObjectParams, PutObjectRequest,
-    PutObjectResult, EndpointConfig,
+    EndpointConfig, ObjectClient, ObjectClientError, ObjectClientResult, PutObjectError, PutObjectParams,
+    PutObjectRequest, PutObjectResult,
 };
 
 use thiserror::Error;
@@ -68,7 +68,7 @@ impl<Client: ObjectClient> UploadRequest<Client> {
         inner: Arc<UploaderInner<Client>>,
         bucket: &str,
         key: &str,
-        endpoint_config: EndpointConfig
+        endpoint_config: EndpointConfig,
     ) -> ObjectClientResult<Self, PutObjectError, Client::ClientError> {
         let params = PutObjectParams::new().trailing_checksums(true);
         let request = inner.client.put_object(bucket, key, &params, endpoint_config).await?;

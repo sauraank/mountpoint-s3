@@ -199,6 +199,7 @@ pub struct S3Filesystem<Client: ObjectClient, Runtime> {
     config: S3FilesystemConfig,
     client: Arc<Client>,
     superblock: Superblock,
+    endpoint_config: EndpointConfig,
     prefetcher: Prefetcher<Client, Runtime>,
     uploader: Uploader<Client>,
     bucket: String,
@@ -222,7 +223,7 @@ where
         config: S3FilesystemConfig,
         endpoint_config: EndpointConfig,
     ) -> Self {
-        let superblock = Superblock::new(bucket, prefix, config.cache_config.clone(), endpoint_config);
+        let superblock = Superblock::new(bucket, prefix, config.cache_config.clone());
 
         let client = Arc::new(client);
 
@@ -240,6 +241,7 @@ where
             next_handle: AtomicU64::new(1),
             dir_handles: AsyncRwLock::new(HashMap::new()),
             file_handles: AsyncRwLock::new(HashMap::new()),
+            endpoint_config,
         }
     }
 
@@ -371,7 +373,7 @@ where
         self.superblock.forget(ino, n);
     }
 
-    pub async fn open(&self, ino: InodeNo, flags: i32, endpoint_config: EndpointConfig) -> Result<Opened, libc::c_int> {
+    pub async fn open(&self, ino: InodeNo, flags: i32) -> Result<Opened, libc::c_int> {
         trace!("fs:open with ino {:?} flags {:?}", ino, flags);
 
         let lookup = self.superblock.getattr(&self.client, ino, true).await?;
@@ -400,7 +402,7 @@ where
                 }
             };
             let key = lookup.inode.full_key();
-            match self.uploader.put(&self.bucket, key, endpoint_config).await {
+            match self.uploader.put(&self.bucket, key, self.endpoint_config.clone()).await {
                 Err(e) => {
                     error!(key, "put failed to start: {e:?}");
                     return Err(libc::EIO);
@@ -445,7 +447,6 @@ where
         _flags: i32,
         _lock: Option<u64>,
         reply: R,
-        endpoint_config: EndpointConfig,
     ) -> R::Replied {
         trace!(
             "fs:read with ino {:?} fh {:?} offset {:?} size {:?}",
@@ -472,10 +473,13 @@ where
         };
 
         if request.is_none() {
-            *request = Some(
-                self.prefetcher
-                    .get(&self.bucket, &handle.full_key, handle.object_size, file_etag, endpoint_config),
-            );
+            *request = Some(self.prefetcher.get(
+                &self.bucket,
+                &handle.full_key,
+                handle.object_size,
+                file_etag,
+                self.endpoint_config.clone(),
+            ));
         }
 
         match request.as_mut().unwrap().read(offset as u64, size as usize).await {

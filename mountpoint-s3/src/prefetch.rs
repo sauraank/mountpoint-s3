@@ -20,7 +20,7 @@ use futures::pin_mut;
 use futures::stream::StreamExt;
 use futures::task::{Spawn, SpawnExt};
 use metrics::counter;
-use mountpoint_s3_client::{ETag, GetObjectError, ObjectClient, ObjectClientError, EndpointConfig};
+use mountpoint_s3_client::{ETag, EndpointConfig, GetObjectError, ObjectClient, ObjectClientError};
 use mountpoint_s3_crt::checksums::crc32c;
 use thiserror::Error;
 use tracing::{debug_span, error, trace, Instrument};
@@ -97,7 +97,14 @@ where
     }
 
     /// Start a new get request to the specified object.
-    pub fn get(&self, bucket: &str, key: &str, size: u64, etag: ETag, endpoint_config: EndpointConfig) -> PrefetchGetObject<Client, Runtime> {
+    pub fn get(
+        &self,
+        bucket: &str,
+        key: &str,
+        size: u64,
+        etag: ETag,
+        endpoint_config: EndpointConfig,
+    ) -> PrefetchGetObject<Client, Runtime> {
         PrefetchGetObject::new(Arc::clone(&self.inner), bucket, key, size, etag, endpoint_config)
     }
 }
@@ -128,7 +135,14 @@ where
     Runtime: Spawn,
 {
     /// Create and spawn a new prefetching request for an object
-    fn new(inner: Arc<PrefetcherInner<Client, Runtime>>, bucket: &str, key: &str, size: u64, etag: ETag, endpoint_config: EndpointConfig) -> Self {
+    fn new(
+        inner: Arc<PrefetcherInner<Client, Runtime>>,
+        bucket: &str,
+        key: &str,
+        size: u64,
+        etag: ETag,
+        endpoint_config: EndpointConfig,
+    ) -> Self {
         PrefetchGetObject {
             inner: inner.clone(),
             current_task: None,
@@ -292,7 +306,10 @@ where
             let endpoint_config = self.endpoint_config.clone();
 
             async move {
-                match client.get_object(&bucket, &key, Some(range.clone()), Some(etag), endpoint_config.clone()).await {
+                match client
+                    .get_object(&bucket, &key, Some(range.clone()), Some(etag), endpoint_config.clone())
+                    .await
+                {
                     Err(e) => {
                         error!(error=?e, "RequestTask get object failed");
                         part_queue_producer.push(Err(e));
