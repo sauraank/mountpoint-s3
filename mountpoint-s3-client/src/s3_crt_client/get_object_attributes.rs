@@ -10,8 +10,8 @@ use thiserror::Error;
 use tracing::debug;
 
 use crate::{
-    Checksum, GetObjectAttributesError, GetObjectAttributesParts, GetObjectAttributesResult, ObjectAttribute,
-    ObjectClientError, ObjectClientResult, ObjectPart, S3CrtClient, S3RequestError,
+    Checksum, EndpointConfig, GetObjectAttributesError, GetObjectAttributesParts, GetObjectAttributesResult,
+    ObjectAttribute, ObjectClientError, ObjectClientResult, ObjectPart, S3CrtClient, S3RequestError,
 };
 
 #[derive(Error, Debug)]
@@ -107,11 +107,13 @@ impl S3CrtClient {
         max_parts: Option<usize>,
         part_number_marker: Option<usize>,
         object_attributes: &[ObjectAttribute],
+        endpoint_config: EndpointConfig,
     ) -> ObjectClientResult<GetObjectAttributesResult, GetObjectAttributesError, S3RequestError> {
+        let endpoint_config = endpoint_config.bucket(bucket);
         let body = {
             let mut message = self
                 .inner
-                .new_request_template("GET", bucket)
+                .new_request_template("GET", endpoint_config)
                 .map_err(S3RequestError::construction_failure)?;
 
             let query = vec![("attributes", "")];

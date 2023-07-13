@@ -13,9 +13,10 @@ use mountpoint_s3::fuse::S3FuseFilesystem;
 use mountpoint_s3::metrics::MetricsSink;
 use mountpoint_s3::prefix::Prefix;
 use mountpoint_s3_client::{
-    AddressingStyle, Endpoint, HeadBucketError, ObjectClientError, S3ClientConfig, S3CrtClient,
+    AddressingStyle, Endpoint, EndpointConfig, HeadBucketError, ObjectClientError, S3ClientConfig, S3CrtClient,
 };
 use mountpoint_s3_client::{ImdsCrtClient, S3ClientAuthConfig};
+use mountpoint_s3_crt::common::allocator::Allocator;
 use nix::sys::signal::Signal;
 use nix::unistd::ForkResult;
 use regex::Regex;
@@ -197,6 +198,15 @@ struct CliArgs {
 
     #[clap(long, help = "Force path-style addressing", help_heading = BUCKET_OPTIONS_HEADER)]
     pub path_addressing: bool,
+
+    #[clap(long, help = "Use S3 Transfer Acceleration", help_heading = BUCKET_OPTIONS_HEADER)]
+    pub transfer_acceleration: bool,
+
+    #[clap(long, help = "Use dual stack endpoint", help_heading = BUCKET_OPTIONS_HEADER)]
+    pub dual_stack: bool,
+
+    #[clap(long, help = "Use FIPS endpoint", help_heading = BUCKET_OPTIONS_HEADER)]
+    pub fips: bool,
 
     #[clap(long, help = "Set the 'x-amz-request-payer' to 'requester' on S3 requests", help_heading = BUCKET_OPTIONS_HEADER)]
     pub requester_pays: bool,
@@ -435,7 +445,7 @@ fn mount(args: CliArgs) -> anyhow::Result<FuseSession> {
     let addressing_style = args.addressing_style();
     let endpoint = args
         .endpoint_url
-        .map(|uri| Endpoint::from_uri(&uri, addressing_style))
+        .map(|uri| Endpoint::from_uri(&uri))
         .transpose()
         .context("Failed to parse endpoint URL")?;
 
@@ -459,6 +469,14 @@ fn mount(args: CliArgs) -> anyhow::Result<FuseSession> {
         S3ClientAuthConfig::Default
     };
 
+    let endpoint_config = EndpointConfig::new()
+        .region(args.region)
+        .addressing_style(addressing_style)
+        .endpoint(endpoint)
+        .use_fips(args.fips)
+        .use_accelerate(args.transfer_acceleration)
+        .use_dual_stack(args.dual_stack);
+
     let mut client_config = S3ClientConfig::new()
         .auth_config(auth_config)
         .throughput_target_gbps(throughput_target_gbps)
@@ -472,14 +490,9 @@ fn mount(args: CliArgs) -> anyhow::Result<FuseSession> {
         client_config = client_config.bucket_owner(&owner);
     }
 
-    let client = create_client_for_bucket(
-        &args.bucket_name,
-        args.region.as_deref(),
-        endpoint,
-        client_config,
-        addressing_style,
-    )
-    .context("Failed to create S3 client")?;
+    let bucket_name = args.bucket_name;
+    let client = create_client_for_bucket(&bucket_name, &endpoint_config, client_config)
+        .context("Failed to create S3 client")?;
     let runtime = client.event_loop_group();
 
     let mut filesystem_config = S3FilesystemConfig::default();
@@ -537,15 +550,13 @@ fn mount(args: CliArgs) -> anyhow::Result<FuseSession> {
 /// responses, which means we don't have to wait for the first file read to start the rampup period.
 fn create_client_for_bucket(
     bucket: &str,
-    supposed_region: Option<&str>,
-    endpoint: Option<Endpoint>,
+    endpoint_config: EndpointConfig,
     client_config: S3ClientConfig,
-    addressing_style: AddressingStyle,
 ) -> Result<S3CrtClient, anyhow::Error> {
     const DEFAULT_REGION: &str = "us-east-1";
 
-    let region_to_try = supposed_region.unwrap_or_else(|| {
-        if endpoint.is_some() {
+    let region_to_try = endpoint_config.get_region().unwrap_or_else(|| {
+        if endpoint_config.get_endpoint().is_some() {
             tracing::warn!(
                 "endpoint specified but region unspecified. using {} as the signing region.",
                 DEFAULT_REGION
@@ -554,23 +565,18 @@ fn create_client_for_bucket(
         DEFAULT_REGION
     });
 
-    let endpoint = if let Some(endpoint) = endpoint.clone() {
-        endpoint
-    } else {
-        Endpoint::from_region(region_to_try, addressing_style)?
-    };
+    let endpoint_config = endpoint_config.region(region_to_try);
+    let client = S3CrtClient::new(client_config.clone().endpoint_config(&endpoint_config))?;
 
-    let client = S3CrtClient::new(region_to_try, client_config.clone().endpoint(endpoint))?;
-
-    let head_request = client.head_bucket(bucket);
+    let head_request = client.head_bucket(bucket, &endpoint_config);
     match futures::executor::block_on(head_request) {
         Ok(_) => Ok(client),
         // Don't try to automatically correct the region if it was manually specified incorrectly
         Err(ObjectClientError::ServiceError(HeadBucketError::IncorrectRegion(region))) if supposed_region.is_none() => {
             tracing::warn!("bucket {bucket} is in region {region}, not {region_to_try}. redirecting...");
-            let endpoint = Endpoint::from_region(&region, addressing_style)?;
-            let new_client = S3CrtClient::new(&region, client_config.endpoint(endpoint))?;
-            let head_request = new_client.head_bucket(bucket);
+            let endpoint_config = endpoint_config.region(&region);
+            let new_client = S3CrtClient::new(client_config.endpoint_config(&endpoint_config))?;
+            let head_request = new_client.head_bucket(bucket, &endpoint_config);
             futures::executor::block_on(head_request)
                 .map(|_| new_client)
                 .with_context(|| format!("HeadBucket failed for bucket {bucket} in region {region}"))

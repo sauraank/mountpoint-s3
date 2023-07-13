@@ -27,7 +27,7 @@ use std::time::{Duration, Instant};
 
 use fuser::FileType;
 use futures::{select_biased, FutureExt};
-use mountpoint_s3_client::{HeadObjectError, HeadObjectResult, ObjectClient, ObjectClientError};
+use mountpoint_s3_client::{EndpointConfig, HeadObjectError, HeadObjectResult, ObjectClient, ObjectClientError};
 use thiserror::Error;
 use time::OffsetDateTime;
 use tracing::{debug, error, trace, warn};
@@ -334,6 +334,7 @@ impl Superblock {
         client: &OC,
         parent_ino: InodeNo,
         name: &OsStr,
+        endpoint_config: EndpointConfig,
     ) -> Result<(), InodeError> {
         let parent = self.inner.get(parent_ino)?;
         let LookedUp { inode, .. } = self.inner.lookup(client, parent_ino, name).await?;
@@ -360,7 +361,7 @@ impl Superblock {
             WriteStatus::Remote => {
                 let (bucket, s3_key) = (self.inner.bucket.as_str(), inode.full_key());
                 debug!(parent=?parent_ino, ?name, "unlink on remote file will delete key {}", s3_key);
-                let delete_obj_result = client.delete_object(bucket, s3_key).await;
+                let delete_obj_result = client.delete_object(bucket, s3_key, endpoint_config).await;
 
                 match delete_obj_result {
                     Ok(_res) => (),
@@ -435,6 +436,7 @@ impl SuperblockInner {
         client: &OC,
         parent_ino: InodeNo,
         name: &OsStr,
+        endpoint_config: EndpointConfig,
     ) -> Result<LookedUp, InodeError> {
         let name = name
             .to_str()
@@ -448,7 +450,7 @@ impl SuperblockInner {
 
         // TODO use caches. if we already know about this name, we just need to revalidate the stat
         // cache and then read it.
-        let remote = self.remote_lookup(client, parent_ino, name).await?;
+        let remote = self.remote_lookup(client, parent_ino, name, endpoint_config).await?;
         self.update_from_remote(parent_ino, name, remote)
     }
 
@@ -459,6 +461,7 @@ impl SuperblockInner {
         client: &OC,
         parent_ino: InodeNo,
         name: &str,
+        endpoint_config: EndpointConfig,
     ) -> Result<Option<RemoteLookup>, InodeError> {
         let parent = self.get(parent_ino)?;
         if parent.kind() != InodeKind::Directory {
@@ -495,9 +498,9 @@ impl SuperblockInner {
         //       "/" to the prefix in the request, the first common prefix we'll get back will be
         //       "dir-1/", because that precedes "dir/" in lexicographic order. Doing the
         //       ListObjects with "/" appended makes sure we always observe the correct prefix.
-        let mut file_lookup = client.head_object(&self.bucket, &full_path).fuse();
+        let mut file_lookup = client.head_object(&self.bucket, &full_path, endpoint_config).fuse();
         let mut dir_lookup = client
-            .list_objects(&self.bucket, None, "/", 1, &full_path_suffixed)
+            .list_objects(&self.bucket, None, "/", 1, &full_path_suffixed, endpoint_config)
             .fuse();
 
         let mut file_state = None;

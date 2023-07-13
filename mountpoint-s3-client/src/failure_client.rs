@@ -14,7 +14,9 @@ use crate::object_client::{
     GetObjectError, HeadObjectError, HeadObjectResult, ListObjectsError, ObjectClientError, ObjectClientResult,
     PutObjectError, PutObjectParams,
 };
-use crate::{ETag, ListObjectsResult, ObjectAttribute, ObjectClient, PutObjectRequest, PutObjectResult};
+use crate::{
+    ETag, EndpointConfig, ListObjectsResult, ObjectAttribute, ObjectClient, PutObjectRequest, PutObjectResult,
+};
 
 // Wrapper for injecting failures into a get stream or a put request
 pub struct FailureRequestWrapper<Client: ObjectClient, RequestWrapperState> {
@@ -76,9 +78,10 @@ where
         &self,
         bucket: &str,
         key: &str,
+        endpoint_config: EndpointConfig,
     ) -> ObjectClientResult<DeleteObjectResult, DeleteObjectError, Self::ClientError> {
         // TODO failure hook for delete_object
-        self.client.delete_object(bucket, key).await
+        self.client.delete_object(bucket, key, endpoint_config).await
     }
 
     async fn get_object(
@@ -87,6 +90,7 @@ where
         key: &str,
         range: Option<Range<u64>>,
         if_match: Option<ETag>,
+        endpoint_config: EndpointConfig,
     ) -> ObjectClientResult<Self::GetObjectResult, GetObjectError, Self::ClientError> {
         let wrapper = (self.get_object_cb)(
             &mut *self.state.lock().unwrap(),
@@ -95,7 +99,10 @@ where
             range.clone(),
             if_match.clone(),
         )?;
-        let get_result = self.client.get_object(bucket, key, range, if_match).await?;
+        let get_result = self
+            .client
+            .get_object(bucket, key, range, if_match, endpoint_config)
+            .await?;
         Ok(FailureGetResult {
             state: wrapper.state,
             result_fn: wrapper.result_fn,
@@ -110,6 +117,7 @@ where
         delimiter: &str,
         max_keys: usize,
         prefix: &str,
+        endpoint_config: EndpointConfig,
     ) -> ObjectClientResult<ListObjectsResult, ListObjectsError, Self::ClientError> {
         (self.list_objects_cb)(
             &mut *self.state.lock().unwrap(),
@@ -121,7 +129,7 @@ where
         )?;
 
         self.client
-            .list_objects(bucket, continuation_token, delimiter, max_keys, prefix)
+            .list_objects(bucket, continuation_token, delimiter, max_keys, prefix, endpoint_config)
             .await
     }
 
@@ -129,9 +137,10 @@ where
         &self,
         bucket: &str,
         key: &str,
+        endpoint_config: EndpointConfig,
     ) -> ObjectClientResult<HeadObjectResult, HeadObjectError, Self::ClientError> {
         (self.head_object_cb)(&mut *self.state.lock().unwrap(), bucket, key)?;
-        self.client.head_object(bucket, key).await
+        self.client.head_object(bucket, key, endpoint_config).await
     }
 
     async fn put_object(
@@ -139,9 +148,10 @@ where
         bucket: &str,
         key: &str,
         params: &PutObjectParams,
+        endpoint_config: EndpointConfig,
     ) -> ObjectClientResult<Self::PutObjectRequest, PutObjectError, Self::ClientError> {
         let wrapper = (self.put_object_cb)(&mut *self.state.lock().unwrap(), bucket, key, &params.clone())?;
-        let request = self.client.put_object(bucket, key, params).await?;
+        let request = self.client.put_object(bucket, key, params, endpoint_config).await?;
         Ok(FailurePutObjectRequest {
             request,
             state: wrapper.state,
@@ -156,10 +166,18 @@ where
         max_parts: Option<usize>,
         part_number_marker: Option<usize>,
         object_attributes: &[ObjectAttribute],
+        endpoint_config: EndpointConfig,
     ) -> ObjectClientResult<GetObjectAttributesResult, GetObjectAttributesError, Self::ClientError> {
         // TODO failure hook for get_object_attributes
         self.client
-            .get_object_attributes(bucket, key, max_parts, part_number_marker, object_attributes)
+            .get_object_attributes(
+                bucket,
+                key,
+                max_parts,
+                part_number_marker,
+                object_attributes,
+                endpoint_config,
+            )
             .await
     }
 }
@@ -379,7 +397,9 @@ mod tests {
 
         let fail_set = HashSet::from([2, 4, 5]);
         for i in 1..=6 {
-            let r = fail_client.get_object(bucket, key, None, None).await;
+            let r = fail_client
+                .get_object(bucket, key, None, None, EndpointConfig::default())
+                .await;
             if fail_set.contains(&i) {
                 assert!(r.is_err());
             } else {

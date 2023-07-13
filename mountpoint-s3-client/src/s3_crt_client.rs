@@ -68,11 +68,126 @@ macro_rules! event {
 }
 
 #[derive(Debug, Clone)]
+pub struct EndpointConfig {
+    bucket: Option<String>,
+    region: String,
+    use_fips: bool,
+    use_accelerate: bool,
+    use_dual_stack: bool,
+    endpoint: Option<Endpoint>,
+    addressing_style: AddressingStyle,
+}
+
+impl Default for EndpointConfig {
+    fn default() -> Self {
+        Self {
+            bucket: None,
+            region: "us-east-1".to_owned(),
+            use_fips: false,
+            use_accelerate: false,
+            use_dual_stack: false,
+            endpoint: None,
+            addressing_style: AddressingStyle::Automatic,
+        }
+    }
+}
+
+impl EndpointConfig {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the bucket name/alias/arn for endpoint configuration
+    #[must_use = "EndpointConfig follows a builder pattern"]
+    pub fn bucket(mut self, bucket: &str) -> Self {
+        self.bucket = Some(bucket.to_owned());
+        self
+    }
+
+    // Set the region for endpoint configuration
+    #[must_use = "EndpointConfig follows a builder pattern"]
+    pub fn region(mut self, region: &str) -> Self {
+        self.region = region.to_owned();
+        self
+    }
+
+    /// use FIPS config for S3
+    #[must_use = "EndpointConfig follows a builder pattern"]
+    pub fn use_fips(mut self, fips: bool) -> Self {
+        self.use_fips = fips;
+        self
+    }
+
+    /// use Transfer Acceleration config for S3
+    #[must_use = "EndpointConfig follows a builder pattern"]
+    pub fn use_accelerate(mut self, accelerate: bool) -> Self {
+        self.use_accelerate = accelerate;
+        self
+    }
+
+    /// use dual stack config for S3
+    #[must_use = "EndpointConfig follows a builder pattern"]
+    pub fn use_dual_stack(mut self, dual_stack: bool) -> Self {
+        self.use_dual_stack = dual_stack;
+        self
+    }
+
+    /// Set predefined url for endpoint configuration
+    #[must_use = "EndpointConfig follows a builder pattern"]
+    pub fn endpoint(mut self, endpoint: Endpoint) -> Self {
+        self.endpoint = Some(endpoint);
+        self
+    }
+
+    /// Set addressing style for endpoint configuration
+    #[must_use = "EndpointConfig follows a builder pattern"]
+    pub fn addressing_style(mut self, addressing_style: AddressingStyle) -> Self {
+        self.addressing_style = addressing_style;
+        self
+    }
+
+    /// Get bucket name if set for endpoint resolution
+    pub fn get_bucket(&self) -> Option<String> {
+        self.bucket.clone()
+    }
+
+    /// get region name for endpoint resolution
+    pub fn get_region(&self) -> String {
+        self.region.clone()
+    }
+
+    /// Check whether to use FIPS for endpoint resolution
+    pub fn is_fips(&self) -> bool {
+        self.use_fips
+    }
+
+    /// Check whether to use transfer acceleration for endpoint resolution
+    pub fn is_accelerate(&self) -> bool {
+        self.use_accelerate
+    }
+
+    /// Check whether to use dual stack for endpoint resolution
+    pub fn is_dual_stack(&self) -> bool {
+        self.use_dual_stack
+    }
+
+    /// Get endpoint url if set for endpoint configuration
+    pub fn get_endpoint(&self) -> Option<Endpoint> {
+        self.endpoint.clone()
+    }
+
+    /// get endpoint addressing style for resolution
+    pub fn get_addresssing_style(&self) -> AddressingStyle {
+        self.addressing_style
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct S3ClientConfig {
     auth_config: S3ClientAuthConfig,
     throughput_target_gbps: f64,
     part_size: usize,
-    endpoint: Option<Endpoint>,
+    endpoint_config: EndpointConfig,
     user_agent_prefix: Option<String>,
     request_payer: Option<String>,
     bucket_owner: Option<String>,
@@ -84,7 +199,7 @@ impl Default for S3ClientConfig {
             auth_config: Default::default(),
             throughput_target_gbps: 10.0,
             part_size: 8 * 1024 * 1024,
-            endpoint: None,
+            endpoint_config: Default::default(),
             user_agent_prefix: None,
             request_payer: None,
             bucket_owner: None,
@@ -120,8 +235,8 @@ impl S3ClientConfig {
 
     /// Set the S3 endpoint to connect to
     #[must_use = "S3ClientConfig follows a builder pattern"]
-    pub fn endpoint(mut self, endpoint: Endpoint) -> Self {
-        self.endpoint = Some(endpoint);
+    pub fn endpoint_config(mut self, endpoint_config: EndpointConfig) -> Self {
+        self.endpoint_config = endpoint_config;
         self
     }
 
@@ -166,9 +281,9 @@ pub struct S3CrtClient {
 }
 
 impl S3CrtClient {
-    pub fn new(region: &str, config: S3ClientConfig) -> Result<Self, NewClientError> {
+    pub fn new(config: S3ClientConfig) -> Result<Self, NewClientError> {
         Ok(Self {
-            inner: Arc::new(S3CrtClientInner::new(region, config)?),
+            inner: Arc::new(S3CrtClientInner::new(config)?),
         })
     }
 
@@ -181,7 +296,6 @@ impl S3CrtClient {
 struct S3CrtClientInner {
     s3_client: Client,
     event_loop_group: EventLoopGroup,
-    endpoint: Endpoint,
     allocator: Allocator,
     next_request_counter: AtomicU64,
     /// user_agent_header will be passed into CRT which add additional information "CRTS3NativeClient/0.1.x".
@@ -193,7 +307,7 @@ struct S3CrtClientInner {
 }
 
 impl S3CrtClientInner {
-    fn new(region: &str, config: S3ClientConfig) -> Result<Self, NewClientError> {
+    fn new(config: S3ClientConfig) -> Result<Self, NewClientError> {
         let allocator = Allocator::default();
 
         let mut event_loop_group = EventLoopGroup::new_default(&allocator, None, || {}).unwrap();
@@ -247,7 +361,8 @@ impl S3CrtClientInner {
         };
 
         if let Some(credentials_provider) = credentials_provider {
-            let signing_config = init_default_signing_config(region, credentials_provider);
+            let signing_config =
+                init_default_signing_config(&config.endpoint_config.get_region(), credentials_provider);
             client_config.signing_config(signing_config);
         }
 
@@ -272,17 +387,10 @@ impl S3CrtClientInner {
 
         let s3_client = Client::new(&allocator, client_config).unwrap();
 
-        let endpoint = if let Some(endpoint) = config.endpoint {
-            endpoint
-        } else {
-            Endpoint::from_region(region, AddressingStyle::Automatic)?
-        };
-
         Ok(Self {
             allocator,
             s3_client,
             event_loop_group,
-            endpoint,
             next_request_counter: AtomicU64::new(0),
             user_agent_header,
             request_payer: config.request_payer,
@@ -295,8 +403,12 @@ impl S3CrtClientInner {
     /// Pre-populates common headers used across all requests. Sets the "accept" header assuming the
     /// response should be XML; this header should be overwritten for requests like GET that return
     /// object data.
-    fn new_request_template(&self, method: &str, bucket: &str) -> Result<S3Message, ConstructionError> {
-        let (uri, path_prefix) = self.endpoint.for_bucket(bucket)?;
+    fn new_request_template(
+        &self,
+        method: &str,
+        endpoint_config: EndpointConfig,
+    ) -> Result<S3Message, ConstructionError> {
+        let uri = Endpoint::set_endpoint(endpoint_config)?;
         let hostname = uri.host_name().to_str().unwrap();
         let port = uri.host_port();
         let hostname_header = if port > 0 {
@@ -322,7 +434,7 @@ impl S3CrtClientInner {
         Ok(S3Message {
             inner: message,
             uri,
-            path_prefix,
+            path_prefix: String::new(),
             checksum_config: None,
         })
     }
@@ -753,8 +865,9 @@ impl ObjectClient for S3CrtClient {
         &self,
         bucket: &str,
         key: &str,
+        endpoint_config: EndpointConfig,
     ) -> ObjectClientResult<DeleteObjectResult, DeleteObjectError, Self::ClientError> {
-        self.delete_object(bucket, key).await
+        self.delete_object(bucket, key, endpoint_config).await
     }
 
     async fn get_object(
@@ -763,10 +876,11 @@ impl ObjectClient for S3CrtClient {
         key: &str,
         range: Option<Range<u64>>,
         if_match: Option<ETag>,
+        endpoint_config: EndpointConfig,
         // TODO: If more arguments are added to get object, make a request struct having those arguments
         // along with bucket and key.
     ) -> ObjectClientResult<Self::GetObjectResult, GetObjectError, Self::ClientError> {
-        self.get_object(bucket, key, range, if_match)
+        self.get_object(bucket, key, range, if_match, endpoint_config)
     }
 
     async fn list_objects(
@@ -776,8 +890,9 @@ impl ObjectClient for S3CrtClient {
         delimiter: &str,
         max_keys: usize,
         prefix: &str,
+        endpoint_config: EndpointConfig,
     ) -> ObjectClientResult<ListObjectsResult, ListObjectsError, Self::ClientError> {
-        self.list_objects(bucket, continuation_token, delimiter, max_keys, prefix)
+        self.list_objects(bucket, continuation_token, delimiter, max_keys, prefix, endpoint_config)
             .await
     }
 
@@ -785,8 +900,9 @@ impl ObjectClient for S3CrtClient {
         &self,
         bucket: &str,
         key: &str,
+        endpoint_config: EndpointConfig,
     ) -> ObjectClientResult<HeadObjectResult, HeadObjectError, Self::ClientError> {
-        self.head_object(bucket, key).await
+        self.head_object(bucket, key, endpoint_config).await
     }
 
     async fn put_object(
@@ -794,8 +910,9 @@ impl ObjectClient for S3CrtClient {
         bucket: &str,
         key: &str,
         params: &PutObjectParams,
+        endpoint_config: EndpointConfig,
     ) -> ObjectClientResult<Self::PutObjectRequest, PutObjectError, Self::ClientError> {
-        self.put_object(bucket, key, params).await
+        self.put_object(bucket, key, params, endpoint_config).await
     }
 
     async fn get_object_attributes(
@@ -805,9 +922,17 @@ impl ObjectClient for S3CrtClient {
         max_parts: Option<usize>,
         part_number_marker: Option<usize>,
         object_attributes: &[ObjectAttribute],
+        endpoint_config: EndpointConfig,
     ) -> ObjectClientResult<GetObjectAttributesResult, GetObjectAttributesError, Self::ClientError> {
-        self.get_object_attributes(bucket, key, max_parts, part_number_marker, object_attributes)
-            .await
+        self.get_object_attributes(
+            bucket,
+            key,
+            max_parts,
+            part_number_marker,
+            object_attributes,
+            endpoint_config,
+        )
+        .await
     }
 }
 
@@ -824,16 +949,16 @@ mod tests {
         let user_agent_prefix = String::from("someprefix");
         let expected_user_agent = "someprefix mountpoint-s3-client/";
 
-        let config = S3ClientConfig {
-            user_agent_prefix: Some(user_agent_prefix),
-            ..Default::default()
-        };
+        let endpoint_config = EndpointConfig::new().bucket("doc-example-bucket");
+        let config: S3ClientConfig = S3ClientConfig::new()
+            .endpoint_config(endpoint_config.clone())
+            .user_agent_prefix(&user_agent_prefix);
 
-        let client = S3CrtClient::new("eu-west-1", config).expect("Create test client");
+        let client = S3CrtClient::new(config).expect("Create test client");
 
         let mut message = client
             .inner
-            .new_request_template("GET", "plutotestankit")
+            .new_request_template("GET", endpoint_config)
             .expect("new request template expected");
 
         let headers = message.inner.get_headers().expect("Expected a block of HTTP headers");
@@ -853,13 +978,14 @@ mod tests {
     fn test_user_agent_without_prefix() {
         let expected_user_agent = "mountpoint-s3-client/";
 
-        let config: S3ClientConfig = Default::default();
+        let endpoint_config = EndpointConfig::new().bucket("doc-example-bucket");
+        let config: S3ClientConfig = S3ClientConfig::new().endpoint_config(endpoint_config.clone());
 
-        let client = S3CrtClient::new("eu-west-1", config).expect("Create test client");
+        let client = S3CrtClient::new(config).expect("Create test client");
 
         let mut message = client
             .inner
-            .new_request_template("GET", "plutotestankit")
+            .new_request_template("GET", endpoint_config)
             .expect("new request template expected");
 
         let headers = message.inner.get_headers().expect("Expected a block of HTTP headers");
@@ -891,13 +1017,16 @@ mod tests {
     fn test_expected_bucket_owner() {
         let expected_bucket_owner = "111122223333";
 
-        let config: S3ClientConfig = S3ClientConfig::new().bucket_owner("111122223333");
+        let endpoint_config = EndpointConfig::new().bucket("doc-example-bucket");
+        let config: S3ClientConfig = S3ClientConfig::new()
+            .bucket_owner("111122223333")
+            .endpoint_config(endpoint_config.clone());
 
-        let client = S3CrtClient::new("eu-west-1", config).expect("Create test client");
+        let client = S3CrtClient::new(config).expect("Create test client");
 
         let mut message = client
             .inner
-            .new_request_template("GET", "doc-example-bucket")
+            .new_request_template("GET", endpoint_config)
             .expect("new request template expected");
 
         let headers = message.inner.get_headers().expect("Expected a block of HTTP headers");

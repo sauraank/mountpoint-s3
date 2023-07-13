@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::object_client::{ObjectClientResult, PutObjectError, PutObjectParams};
-use crate::{ObjectClientError, PutObjectRequest, PutObjectResult, S3CrtClient, S3RequestError};
+use crate::{EndpointConfig, ObjectClientError, PutObjectRequest, PutObjectResult, S3CrtClient, S3RequestError};
 use async_trait::async_trait;
 use mountpoint_s3_crt::http::request_response::Header;
 use mountpoint_s3_crt::io::async_stream::{self, AsyncStreamWriter};
@@ -16,12 +16,14 @@ impl S3CrtClient {
         bucket: &str,
         key: &str,
         params: &PutObjectParams,
+        endpoint_config: EndpointConfig,
     ) -> ObjectClientResult<S3PutObjectRequest, PutObjectError, S3RequestError> {
         Ok(S3PutObjectRequest::new(
             self.inner.clone(),
             bucket.to_owned(),
             key.to_owned(),
             params.to_owned(),
+            endpoint_config,
         ))
     }
 }
@@ -37,10 +39,17 @@ pub struct S3PutObjectRequest {
     params: PutObjectParams,
     /// Delay the request after the first write: empty requests need special handling.
     inner: Option<S3PutRequest>,
+    endpoint_config: EndpointConfig,
 }
 
 impl S3PutObjectRequest {
-    fn new(client: Arc<S3CrtClientInner>, bucket: String, key: String, params: PutObjectParams) -> Self {
+    fn new(
+        client: Arc<S3CrtClientInner>,
+        bucket: String,
+        key: String,
+        params: PutObjectParams,
+        endpoint_config: EndpointConfig,
+    ) -> Self {
         let span = request_span!(client, "put_object");
         span.in_scope(|| debug!(?bucket, ?key, ?params, "create request"));
         Self {
@@ -50,6 +59,7 @@ impl S3PutObjectRequest {
             key,
             params,
             inner: None,
+            endpoint_config,
         }
     }
 
@@ -57,9 +67,10 @@ impl S3PutObjectRequest {
     /// To upload an empty object, set `is_empty` to `true` and drop the
     /// returned [AsyncStreamWriter] without completing it.
     fn make_request(&self, is_empty: bool) -> Result<S3PutRequest, S3RequestError> {
+        let endpoint_config = self.endpoint_config.clone().bucket(&self.bucket);
         let mut message = self
             .client
-            .new_request_template("PUT", &self.bucket)
+            .new_request_template("PUT", endpoint_config)
             .map_err(S3RequestError::construction_failure)?;
 
         let key = format!("/{}", self.key);

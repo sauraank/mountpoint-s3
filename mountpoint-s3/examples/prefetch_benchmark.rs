@@ -74,7 +74,7 @@ fn main() {
     if let Some(part_size) = part_size {
         config = config.part_size(part_size);
     }
-    let client = Arc::new(S3CrtClient::new(region, config).expect("couldn't create client"));
+    let client = Arc::new(S3CrtClient::new(config).expect("couldn't create client"));
 
     for i in 0..iterations.unwrap_or(1) {
         let runtime = ThreadPool::builder().pool_size(1).create().unwrap();

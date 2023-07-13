@@ -10,7 +10,7 @@ use tracing::{debug, error};
 
 use crate::object_client::{ListObjectsError, ListObjectsResult, ObjectClientError, ObjectClientResult, ObjectInfo};
 use crate::s3_crt_client::S3RequestError;
-use crate::S3CrtClient;
+use crate::{EndpointConfig, S3CrtClient};
 
 #[derive(Error, Debug)]
 #[non_exhaustive]
@@ -136,12 +136,14 @@ impl S3CrtClient {
         delimiter: &str,
         max_keys: usize,
         prefix: &str,
+        endpoint_config: EndpointConfig,
     ) -> ObjectClientResult<ListObjectsResult, ListObjectsError, S3RequestError> {
         // Scope the endpoint, message, etc. since otherwise rustc thinks we use Message across the await.
+        let endpoint_config = endpoint_config.bucket(bucket);
         let body = {
             let mut message = self
                 .inner
-                .new_request_template("GET", bucket)
+                .new_request_template("GET", endpoint_config)
                 .map_err(S3RequestError::construction_failure)?;
 
             let max_keys = format!("{max_keys}");

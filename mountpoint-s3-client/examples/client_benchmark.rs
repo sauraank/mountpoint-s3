@@ -4,7 +4,7 @@ use std::time::Instant;
 
 use clap::{Arg, Command};
 use futures::StreamExt;
-use mountpoint_s3_client::{ObjectClient, S3ClientConfig, S3CrtClient};
+use mountpoint_s3_client::{EndpointConfig, ObjectClient, S3ClientConfig, S3CrtClient};
 use mountpoint_s3_crt::common::rust_log_adapter::RustLogAdapter;
 use tracing_subscriber::fmt::Subscriber;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -63,14 +63,15 @@ fn main() {
         .map(|s| s.parse::<usize>().expect("iterations must be a number"));
     let region = matches.get_one::<String>("region").unwrap();
 
-    let mut config = S3ClientConfig::new();
+    let endpoint_config = EndpointConfig::new().bucket(bucket).region(region);
+    let mut config = S3ClientConfig::new().endpoint_config(endpoint_config).clone();
     if let Some(throughput_target_gbps) = throughput_target_gbps {
         config = config.throughput_target_gbps(throughput_target_gbps);
     }
     if let Some(part_size) = part_size {
         config = config.part_size(part_size);
     }
-    let client = S3CrtClient::new(region, config).expect("couldn't create client");
+    let client = S3CrtClient::new(config).expect("couldn't create client");
 
     for i in 0..iterations.unwrap_or(1) {
         let received_size = Arc::new(AtomicU64::new(0));
@@ -79,7 +80,13 @@ fn main() {
         let received_size_clone = Arc::clone(&received_size);
         futures::executor::block_on(async move {
             let mut request = client
-                .get_object(bucket, key, None, None)
+                .get_object(
+                    bucket,
+                    key,
+                    None,
+                    None,
+                    EndpointConfig::new().bucket(bucket).region(region),
+                )
                 .await
                 .expect("couldn't create get request");
             loop {

@@ -3,7 +3,7 @@
 use aws_sdk_s3 as s3;
 use bytes::Bytes;
 use futures::{pin_mut, Stream, StreamExt};
-use mountpoint_s3_client::{S3ClientConfig, S3CrtClient};
+use mountpoint_s3_client::{EndpointConfig, S3ClientConfig, S3CrtClient};
 use mountpoint_s3_crt::common::rust_log_adapter::RustLogAdapter;
 use rand::rngs::OsRng;
 use rand::RngCore;
@@ -17,8 +17,12 @@ fn init_tracing_subscriber() {
     let _ = tracing_subscriber::fmt::try_init();
 }
 
-pub fn get_test_client() -> S3CrtClient {
-    S3CrtClient::new(&get_test_region(), S3ClientConfig::new()).expect("could not create test client")
+pub fn get_test_endpoint_config() -> EndpointConfig {
+    EndpointConfig::new().region(&get_test_region())
+}
+
+pub fn get_test_client(endpoint_config: EndpointConfig) -> S3CrtClient {
+    S3CrtClient::new(S3ClientConfig::new().endpoint_config(endpoint_config)).expect("could not create test client")
 }
 
 pub fn get_test_bucket_and_prefix(test_name: &str) -> (String, String) {
@@ -148,8 +152,8 @@ macro_rules! object_client_test {
             #[tokio::test]
             async fn rust_crt() {
                 let (bucket, prefix) = get_test_bucket_and_prefix(stringify!($test_fn_identifier));
-
-                let client = get_test_client();
+                let endpoint_config = get_test_endpoint_config();
+                let client = get_test_client(endpoint_config);
 
                 $test_fn_identifier(&client, &bucket, &prefix).await;
             }

@@ -11,7 +11,7 @@ pub use endpoint::{AddressingStyle, Endpoint};
 pub use imds_crt_client::ImdsCrtClient;
 pub use object_client::*;
 pub use s3_crt_client::head_bucket::HeadBucketError;
-pub use s3_crt_client::{S3ClientAuthConfig, S3ClientConfig, S3CrtClient, S3RequestError};
+pub use s3_crt_client::{EndpointConfig, S3ClientAuthConfig, S3ClientConfig, S3CrtClient, S3RequestError};
 
 #[cfg(test)]
 mod tests {
@@ -19,6 +19,6 @@ mod tests {
 
     #[test]
     fn smoke() {
-        let _client = S3CrtClient::new("us-east-1", Default::default()).unwrap();
+        let _client = S3CrtClient::new(Default::default()).unwrap();
     }
 }

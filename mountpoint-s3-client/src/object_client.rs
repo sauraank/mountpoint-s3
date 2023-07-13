@@ -12,6 +12,8 @@ use time::OffsetDateTime;
 
 use md5::{Digest, Md5};
 
+use crate::EndpointConfig;
+
 /// A single element of the [ObjectClient::get_object] response is a pair of offset within the
 /// object and the bytes starting at that offset.
 pub type GetBodyPart = (u64, Box<[u8]>);
@@ -72,6 +74,7 @@ pub trait ObjectClient {
         &self,
         bucket: &str,
         key: &str,
+        endpoint_config: EndpointConfig,
     ) -> ObjectClientResult<DeleteObjectResult, DeleteObjectError, Self::ClientError>;
 
     /// Get an object from the object store. Returns a stream of body parts of the object. Parts are
@@ -82,6 +85,7 @@ pub trait ObjectClient {
         key: &str,
         range: Option<Range<u64>>,
         if_match: Option<ETag>,
+        endpoint_config: EndpointConfig,
     ) -> ObjectClientResult<Self::GetObjectResult, GetObjectError, Self::ClientError>;
 
     /// List the objects in a bucket under a given prefix
@@ -92,6 +96,7 @@ pub trait ObjectClient {
         delimiter: &str,
         max_keys: usize,
         prefix: &str,
+        endpoint_config: EndpointConfig,
     ) -> ObjectClientResult<ListObjectsResult, ListObjectsError, Self::ClientError>;
 
     /// Retrieve object metadata without retrieving the object contents
@@ -99,6 +104,7 @@ pub trait ObjectClient {
         &self,
         bucket: &str,
         key: &str,
+        endpoint_config: EndpointConfig,
     ) -> ObjectClientResult<HeadObjectResult, HeadObjectError, Self::ClientError>;
 
     /// Put an object into the object store. Returns a [PutObjectRequest] for callers
@@ -108,6 +114,7 @@ pub trait ObjectClient {
         bucket: &str,
         key: &str,
         params: &PutObjectParams,
+        endpoint_config: EndpointConfig,
     ) -> ObjectClientResult<Self::PutObjectRequest, PutObjectError, Self::ClientError>;
 
     /// Retrieves all the metadata from an object without returning the object contents.
@@ -118,6 +125,7 @@ pub trait ObjectClient {
         max_parts: Option<usize>,
         part_number_marker: Option<usize>,
         object_attributes: &[ObjectAttribute],
+        endpoint_config: EndpointConfig,
     ) -> ObjectClientResult<GetObjectAttributesResult, GetObjectAttributesError, Self::ClientError>;
 }
 
