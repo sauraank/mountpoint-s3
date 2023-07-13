@@ -64,6 +64,7 @@ impl ReaddirHandle {
         parent_ino: InodeNo,
         full_path: String,
         page_size: usize,
+        endpoint_config: EndpointConfig,
     ) -> Result<Self, InodeError> {
         let local_entries = {
             let inode = inner.get(dir_ino)?;
@@ -96,7 +97,7 @@ impl ReaddirHandle {
             &full_path,
             page_size,
             local_entries.into(),
-            inner.endpoint_config,
+            endpoint_config,
         );
 
         Ok(Self {

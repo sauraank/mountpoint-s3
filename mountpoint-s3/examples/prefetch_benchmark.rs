@@ -5,7 +5,7 @@ use std::time::Instant;
 use clap::{Arg, Command};
 use futures::executor::{block_on, ThreadPool};
 use mountpoint_s3::prefetch::Prefetcher;
-use mountpoint_s3_client::{ETag, S3ClientConfig, S3CrtClient};
+use mountpoint_s3_client::{ETag, S3ClientConfig, S3CrtClient, EndpointConfig};
 use mountpoint_s3_crt::common::rust_log_adapter::RustLogAdapter;
 use tracing_subscriber::fmt::Subscriber;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -67,7 +67,8 @@ fn main() {
         .map(|s| s.parse::<usize>().expect("iterations must be a number"));
     let region = matches.get_one::<String>("region").unwrap();
 
-    let mut config = S3ClientConfig::new();
+    let endpoint_config = EndpointConfig::new().region(region);
+    let mut config = S3ClientConfig::new().endpoint_config(endpoint_config.clone());
     if let Some(throughput_target_gbps) = throughput_target_gbps {
         config = config.throughput_target_gbps(throughput_target_gbps);
     }
@@ -83,7 +84,7 @@ fn main() {
 
         let start = Instant::now();
 
-        let mut request = manager.get(bucket, key, size, ETag::for_tests());
+        let mut request = manager.get(bucket, key, size, ETag::for_tests(), endpoint_config.clone());
         block_on(async {
             loop {
                 let offset = received_size.load(Ordering::SeqCst);

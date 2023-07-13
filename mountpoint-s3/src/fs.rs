@@ -347,7 +347,7 @@ where
     pub async fn lookup(&self, parent: InodeNo, name: &OsStr) -> Result<Entry, libc::c_int> {
         trace!("fs:lookup with parent {:?} name {:?}", parent, name);
 
-        let lookup = self.superblock.lookup(&self.client, parent, name).await?;
+        let lookup = self.superblock.lookup(&self.client, parent, name, self.endpoint_config.clone()).await?;
         let attr = self.make_attr(&lookup);
         Ok(Entry {
             ttl: lookup.validity(),
@@ -359,7 +359,7 @@ where
     pub async fn getattr(&self, ino: InodeNo) -> Result<Attr, libc::c_int> {
         trace!("fs:getattr with ino {:?}", ino);
 
-        let lookup = self.superblock.getattr(&self.client, ino, false).await?;
+        let lookup = self.superblock.getattr(&self.client, ino, false, self.endpoint_config.clone()).await?;
         let attr = self.make_attr(&lookup);
 
         Ok(Attr {
@@ -376,7 +376,7 @@ where
     pub async fn open(&self, ino: InodeNo, flags: i32) -> Result<Opened, libc::c_int> {
         trace!("fs:open with ino {:?} flags {:?}", ino, flags);
 
-        let lookup = self.superblock.getattr(&self.client, ino, true).await?;
+        let lookup = self.superblock.getattr(&self.client, ino, true, self.endpoint_config.clone()).await?;
 
         match lookup.inode.kind() {
             InodeKind::Directory => return Err(libc::EISDIR),
@@ -513,7 +513,7 @@ where
 
         let lookup = self
             .superblock
-            .create(&self.client, parent, name, InodeKind::File)
+            .create(&self.client, parent, name, InodeKind::File, self.endpoint_config.clone())
             .await?;
         let attr = self.make_attr(&lookup);
         Ok(Entry {
@@ -532,7 +532,7 @@ where
     ) -> Result<Entry, libc::c_int> {
         let lookup = self
             .superblock
-            .create(&self.client, parent, name, InodeKind::Directory)
+            .create(&self.client, parent, name, InodeKind::Directory, self.endpoint_config.clone())
             .await?;
         let attr = self.make_attr(&lookup);
         Ok(Entry {
@@ -578,7 +578,7 @@ where
     pub async fn opendir(&self, parent: InodeNo, _flags: i32) -> Result<Opened, libc::c_int> {
         trace!("fs:opendir with parent {:?} flags {:?}", parent, _flags);
 
-        let inode_handle = self.superblock.readdir(&self.client, parent, 1000).await?;
+        let inode_handle = self.superblock.readdir(&self.client, parent, 1000, self.endpoint_config.clone()).await?;
 
         let fh = self.next_handle();
         let handle = DirHandle {
@@ -638,7 +638,7 @@ where
         }
 
         if dir_handle.offset() < 1 {
-            let lookup = self.superblock.getattr(&self.client, parent, false).await?;
+            let lookup = self.superblock.getattr(&self.client, parent, false, self.endpoint_config.clone()).await?;
             let attr = self.make_attr(&lookup);
             if reply.add(parent, dir_handle.offset() + 1, ".", attr, 0u64, lookup.validity()) {
                 return Ok(reply);
@@ -648,7 +648,7 @@ where
         if dir_handle.offset() < 2 {
             let lookup = self
                 .superblock
-                .getattr(&self.client, dir_handle.handle.parent(), false)
+                .getattr(&self.client, dir_handle.handle.parent(), false, self.endpoint_config.clone())
                 .await?;
             let attr = self.make_attr(&lookup);
             if reply.add(
@@ -755,7 +755,7 @@ where
     }
 
     pub async fn rmdir(&self, parent_ino: InodeNo, name: &OsStr) -> Result<(), libc::c_int> {
-        self.superblock.rmdir(&self.client, parent_ino, name).await?;
+        self.superblock.rmdir(&self.client, parent_ino, name, self.endpoint_config.clone()).await?;
         Ok(())
     }
 
@@ -765,7 +765,7 @@ where
     }
 
     pub async fn unlink(&self, parent_ino: InodeNo, name: &OsStr) -> Result<(), libc::c_int> {
-        match self.superblock.unlink(&self.client, parent_ino, name).await {
+        match self.superblock.unlink(&self.client, parent_ino, name, self.endpoint_config.clone()).await {
             Ok(()) => Ok(()),
             Err(e) => {
                 error!(parent=?parent_ino, ?name, "unlink failed: {e:?}");
