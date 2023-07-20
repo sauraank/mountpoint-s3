@@ -20,7 +20,7 @@ use futures::pin_mut;
 use futures::stream::StreamExt;
 use futures::task::{Spawn, SpawnExt};
 use metrics::counter;
-use mountpoint_s3_client::{ETag, EndpointConfig, GetObjectError, ObjectClient, ObjectClientError};
+use mountpoint_s3_client::{ETag, GetObjectError, ObjectClient, ObjectClientError};
 use mountpoint_s3_crt::checksums::crc32c;
 use thiserror::Error;
 use tracing::{debug_span, error, trace, Instrument};
@@ -97,15 +97,8 @@ where
     }
 
     /// Start a new get request to the specified object.
-    pub fn get(
-        &self,
-        bucket: &str,
-        key: &str,
-        size: u64,
-        etag: ETag,
-        endpoint_config: EndpointConfig,
-    ) -> PrefetchGetObject<Client, Runtime> {
-        PrefetchGetObject::new(Arc::clone(&self.inner), bucket, key, size, etag, endpoint_config)
+    pub fn get(&self, bucket: &str, key: &str, size: u64, etag: ETag) -> PrefetchGetObject<Client, Runtime> {
+        PrefetchGetObject::new(Arc::clone(&self.inner), bucket, key, size, etag)
     }
 }
 
@@ -126,7 +119,6 @@ pub struct PrefetchGetObject<Client: ObjectClient, Runtime> {
     next_request_offset: u64,
     size: u64,
     etag: ETag,
-    endpoint_config: EndpointConfig,
 }
 
 impl<Client, Runtime> PrefetchGetObject<Client, Runtime>
@@ -135,14 +127,7 @@ where
     Runtime: Spawn,
 {
     /// Create and spawn a new prefetching request for an object
-    fn new(
-        inner: Arc<PrefetcherInner<Client, Runtime>>,
-        bucket: &str,
-        key: &str,
-        size: u64,
-        etag: ETag,
-        endpoint_config: EndpointConfig,
-    ) -> Self {
+    fn new(inner: Arc<PrefetcherInner<Client, Runtime>>, bucket: &str, key: &str, size: u64, etag: ETag) -> Self {
         PrefetchGetObject {
             inner: inner.clone(),
             current_task: None,
@@ -155,7 +140,6 @@ where
             key: key.to_owned(),
             size,
             etag,
-            endpoint_config,
         }
     }
 
@@ -303,13 +287,9 @@ where
             let key = self.key.to_owned();
             let etag = self.etag.clone();
             let span = debug_span!("prefetch", range=?range);
-            let endpoint_config = self.endpoint_config.clone();
 
             async move {
-                match client
-                    .get_object(&bucket, &key, Some(range.clone()), Some(etag), endpoint_config.clone())
-                    .await
-                {
+                match client.get_object(&bucket, &key, Some(range.clone()), Some(etag)).await {
                     Err(e) => {
                         error!(error=?e, "RequestTask get object failed");
                         part_queue_producer.push(Err(e));
@@ -475,7 +455,7 @@ mod tests {
         let runtime = ThreadPool::builder().pool_size(1).create().unwrap();
         let prefetcher = Prefetcher::new(Arc::new(client), runtime, test_config);
 
-        let mut request = prefetcher.get("test-bucket", "hello", size, etag, Default::default());
+        let mut request = prefetcher.get("test-bucket", "hello", size, etag);
 
         let mut next_offset = 0;
         loop {
@@ -551,7 +531,7 @@ mod tests {
         let runtime = ThreadPool::builder().pool_size(1).create().unwrap();
         let prefetcher = Prefetcher::new(Arc::new(client), runtime, test_config);
 
-        let mut request = prefetcher.get("test-bucket", "hello", size, etag, Default::default());
+        let mut request = prefetcher.get("test-bucket", "hello", size, etag);
 
         let mut next_offset = 0;
         loop {
@@ -627,7 +607,7 @@ mod tests {
         let prefetcher = Prefetcher::new(Arc::new(client), runtime, test_config);
         let etag = ETag::for_tests();
 
-        let mut request = prefetcher.get("test-bucket", "hello", object_size, etag, Default::default());
+        let mut request = prefetcher.get("test-bucket", "hello", object_size, etag);
 
         request.next_request_offset = next_request_offset as u64;
         request.next_request_size = current_request_size;
@@ -672,7 +652,7 @@ mod tests {
         let runtime = ThreadPool::builder().pool_size(1).create().unwrap();
         let prefetcher = Prefetcher::new(Arc::new(client), runtime, test_config);
 
-        let mut request = prefetcher.get("test-bucket", "hello", object_size, etag, Default::default());
+        let mut request = prefetcher.get("test-bucket", "hello", object_size, etag);
 
         for (offset, length) in reads {
             assert!(offset < object_size);

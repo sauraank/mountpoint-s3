@@ -17,7 +17,7 @@ use crate::object_client::{
     GetObjectError, HeadObjectError, HeadObjectResult, ListObjectsError, ListObjectsResult, ObjectClient,
     ObjectClientError, ObjectClientResult, ObjectInfo, PutObjectError, PutObjectParams, PutObjectResult,
 };
-use crate::{Checksum, ETag, EndpointConfig, ObjectAttribute, PutObjectRequest};
+use crate::{Checksum, ETag, ObjectAttribute, PutObjectRequest};
 
 pub const RAMP_MODULUS: usize = 251; // Largest prime under 256
 static_assertions::const_assert!((RAMP_MODULUS > 0) && (RAMP_MODULUS <= 256));
@@ -257,7 +257,6 @@ impl ObjectClient for MockClient {
         &self,
         bucket: &str,
         key: &str,
-        _endpoint_config: EndpointConfig,
     ) -> ObjectClientResult<DeleteObjectResult, DeleteObjectError, Self::ClientError> {
         trace!(bucket, key, "DeleteObject");
 
@@ -276,7 +275,6 @@ impl ObjectClient for MockClient {
         key: &str,
         range: Option<Range<u64>>,
         if_match: Option<ETag>,
-        _endpoint_config: EndpointConfig,
     ) -> ObjectClientResult<Self::GetObjectResult, GetObjectError, Self::ClientError> {
         trace!(bucket, key, ?range, ?if_match, "GetObject");
 
@@ -317,7 +315,6 @@ impl ObjectClient for MockClient {
         &self,
         bucket: &str,
         key: &str,
-        _endpoint_config: EndpointConfig,
     ) -> ObjectClientResult<HeadObjectResult, HeadObjectError, Self::ClientError> {
         trace!(bucket, key, "HeadObject");
 
@@ -349,7 +346,6 @@ impl ObjectClient for MockClient {
         delimiter: &str,
         max_keys: usize,
         prefix: &str,
-        _endpoint_config: EndpointConfig,
     ) -> ObjectClientResult<ListObjectsResult, ListObjectsError, Self::ClientError> {
         trace!(bucket, ?continuation_token, delimiter, max_keys, prefix, "ListObjects");
 
@@ -450,7 +446,6 @@ impl ObjectClient for MockClient {
         bucket: &str,
         key: &str,
         _params: &PutObjectParams,
-        _endpoint_config: EndpointConfig,
     ) -> ObjectClientResult<Self::PutObjectRequest, PutObjectError, Self::ClientError> {
         trace!(bucket, key, "PutObject");
 
@@ -469,7 +464,6 @@ impl ObjectClient for MockClient {
         _max_parts: Option<usize>,
         _part_number_marker: Option<usize>,
         object_attributes: &[ObjectAttribute],
-        _endpoint_config: EndpointConfig,
     ) -> ObjectClientResult<GetObjectAttributesResult, GetObjectAttributesError, Self::ClientError> {
         trace!(bucket, key, "GetObjectAttributes");
 
@@ -570,7 +564,7 @@ mod tests {
         client.add_object(key, MockObject::from_bytes(&body, ETag::for_tests()));
 
         let mut get_request = client
-            .get_object("test_bucket", key, range.clone(), None, EndpointConfig::default())
+            .get_object("test_bucket", key, range.clone(), None)
             .await
             .expect("should not fail");
 
@@ -621,47 +615,33 @@ mod tests {
         }
 
         assert!(matches!(
-            client
-                .get_object("wrong_bucket", "key1", None, None, EndpointConfig::default())
-                .await,
+            client.get_object("wrong_bucket", "key1", None, None).await,
             Err(ObjectClientError::ServiceError(GetObjectError::NoSuchBucket))
         ));
 
         assert!(matches!(
-            client
-                .get_object("test_bucket", "wrong_key", None, None, EndpointConfig::default())
-                .await,
+            client.get_object("test_bucket", "wrong_key", None, None).await,
             Err(ObjectClientError::ServiceError(GetObjectError::NoSuchKey))
         ));
 
         assert_client_error!(
-            client
-                .get_object("test_bucket", "key1", Some(0..2001), None, EndpointConfig::default())
-                .await,
+            client.get_object("test_bucket", "key1", Some(0..2001), None).await,
             "invalid range, length=2000"
         );
         assert_client_error!(
-            client
-                .get_object("test_bucket", "key1", Some(2000..2000), None, EndpointConfig::default())
-                .await,
+            client.get_object("test_bucket", "key1", Some(2000..2000), None).await,
             "invalid range, length=2000"
         );
         assert_client_error!(
-            client
-                .get_object("test_bucket", "key1", Some(500..2001), None, EndpointConfig::default())
-                .await,
+            client.get_object("test_bucket", "key1", Some(500..2001), None).await,
             "invalid range, length=2000"
         );
         assert_client_error!(
-            client
-                .get_object("test_bucket", "key1", Some(5000..2001), None, EndpointConfig::default())
-                .await,
+            client.get_object("test_bucket", "key1", Some(5000..2001), None).await,
             "invalid range, length=2000"
         );
         assert_client_error!(
-            client
-                .get_object("test_bucket", "key1", Some(5000..1), None, EndpointConfig::default())
-                .await,
+            client.get_object("test_bucket", "key1", Some(5000..1), None).await,
             "invalid range, length=2000"
         );
     }
@@ -687,14 +667,7 @@ mod tests {
         macro_rules! check {
             ($delimiter:expr, $max_keys:expr, $prefix:expr, $objects:expr, $prefixes:expr) => {
                 let result = client
-                    .list_objects(
-                        "test_bucket",
-                        None,
-                        $delimiter,
-                        $max_keys,
-                        $prefix,
-                        EndpointConfig::default(),
-                    )
+                    .list_objects("test_bucket", None, $delimiter, $max_keys, $prefix)
                     .await
                     .expect("should not fail");
                 assert_eq!(
@@ -728,14 +701,7 @@ mod tests {
         macro_rules! check_continuation {
             ($delimiter:expr, $max_keys:expr, $prefix:expr, $objects:expr, $prefixes:expr) => {
                 let result = client
-                    .list_objects(
-                        "test_bucket",
-                        None,
-                        $delimiter,
-                        $max_keys,
-                        $prefix,
-                        EndpointConfig::default(),
-                    )
+                    .list_objects("test_bucket", None, $delimiter, $max_keys, $prefix)
                     .await
                     .expect("should not fail");
                 assert!(result.next_continuation_token.is_some());
@@ -747,7 +713,6 @@ mod tests {
                         $delimiter,
                         $max_keys,
                         $prefix,
-                        EndpointConfig::default(),
                     )
                     .await
                     .expect("should not fail");
@@ -789,14 +754,7 @@ mod tests {
         macro_rules! check {
             ($delimiter:expr, $prefix:expr, $objects:expr, $prefixes:expr) => {
                 let result = client
-                    .list_objects(
-                        "test_bucket",
-                        None,
-                        $delimiter,
-                        1000,
-                        $prefix,
-                        EndpointConfig::default(),
-                    )
+                    .list_objects("test_bucket", None, $delimiter, 1000, $prefix)
                     .await
                     .expect("should not fail");
                 assert_eq!(
@@ -831,7 +789,7 @@ mod tests {
         });
 
         let mut put_request = client
-            .put_object("test_bucket", "key1", &Default::default(), EndpointConfig::default())
+            .put_object("test_bucket", "key1", &Default::default())
             .await
             .expect("put_object failed");
 
@@ -847,7 +805,7 @@ mod tests {
         put_request.complete().await.expect("put_object failed");
 
         let mut get_request = client
-            .get_object("test_bucket", "key1", None, None, EndpointConfig::default())
+            .get_object("test_bucket", "key1", None, None)
             .await
             .expect("get_object failed");
 

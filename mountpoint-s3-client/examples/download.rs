@@ -51,15 +51,15 @@ fn main() {
         start..(end + 1)
     });
 
-    let endpoint_config = EndpointConfig::new().bucket(bucket).region(region);
-    let client = S3CrtClient::new(S3ClientConfig::new().endpoint_config(endpoint_config.clone()))
-        .expect("couldn't create client");
+    let endpoint_config = EndpointConfig::new(region);
+    let client =
+        S3CrtClient::new(S3ClientConfig::new().endpoint_config(endpoint_config)).expect("couldn't create client");
 
     let last_offset = Arc::new(Mutex::new(None));
     let last_offset_clone = Arc::clone(&last_offset);
     futures::executor::block_on(async move {
         let mut request = client
-            .get_object(bucket, key, range, None, endpoint_config)
+            .get_object(bucket, key, range, None)
             .await
             .expect("couldn't create get request");
         loop {

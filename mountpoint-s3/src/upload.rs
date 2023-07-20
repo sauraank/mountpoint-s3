@@ -1,8 +1,8 @@
 use std::{fmt::Debug, sync::Arc};
 
 use mountpoint_s3_client::{
-    EndpointConfig, ObjectClient, ObjectClientError, ObjectClientResult, PutObjectError, PutObjectParams,
-    PutObjectRequest, PutObjectResult,
+    ObjectClient, ObjectClientError, ObjectClientResult, PutObjectError, PutObjectParams, PutObjectRequest,
+    PutObjectResult,
 };
 
 use thiserror::Error;
@@ -34,9 +34,8 @@ impl<Client: ObjectClient> Uploader<Client> {
         &self,
         bucket: &str,
         key: &str,
-        endpoint_config: EndpointConfig,
     ) -> ObjectClientResult<UploadRequest<Client>, PutObjectError, Client::ClientError> {
-        UploadRequest::new(Arc::clone(&self.inner), bucket, key, endpoint_config).await
+        UploadRequest::new(Arc::clone(&self.inner), bucket, key).await
     }
 }
 
@@ -68,10 +67,9 @@ impl<Client: ObjectClient> UploadRequest<Client> {
         inner: Arc<UploaderInner<Client>>,
         bucket: &str,
         key: &str,
-        endpoint_config: EndpointConfig,
     ) -> ObjectClientResult<Self, PutObjectError, Client::ClientError> {
         let params = PutObjectParams::new().trailing_checksums(true);
-        let request = inner.client.put_object(bucket, key, &params, endpoint_config).await?;
+        let request = inner.client.put_object(bucket, key, &params).await?;
         let maximum_upload_size = inner.client.part_size().map(|ps| ps * MAX_S3_MULTIPART_UPLOAD_PARTS);
 
         Ok(Self {
@@ -147,7 +145,7 @@ mod tests {
             part_size: 32,
         }));
         let uploader = Uploader::new(client.clone());
-        let request = uploader.put(bucket, key, Default::default()).await.unwrap();
+        let request = uploader.put(bucket, key).await.unwrap();
 
         assert!(!client.contains_key(key));
         assert!(client.is_upload_in_progress(key));
@@ -170,7 +168,7 @@ mod tests {
         }));
         let uploader = Uploader::new(client.clone());
 
-        let mut request = uploader.put(bucket, key, Default::default()).await.unwrap();
+        let mut request = uploader.put(bucket, key).await.unwrap();
 
         let data = "foo";
         let mut offset = 0;
@@ -220,7 +218,7 @@ mod tests {
 
         // First request fails on first write.
         {
-            let mut request = uploader.put(bucket, key, Default::default()).await.unwrap();
+            let mut request = uploader.put(bucket, key).await.unwrap();
 
             let data = "foo";
             request
@@ -233,7 +231,7 @@ mod tests {
 
         // Second request fails on complete (after one write).
         {
-            let mut request = uploader.put(bucket, key, Default::default()).await.unwrap();
+            let mut request = uploader.put(bucket, key).await.unwrap();
 
             let data = "foo";
             _ = request.write(0, data.as_bytes()).await.unwrap();
@@ -260,7 +258,7 @@ mod tests {
             part_size: PART_SIZE,
         }));
         let uploader = Uploader::new(client.clone());
-        let mut request = uploader.put(bucket, key, Default::default()).await.unwrap();
+        let mut request = uploader.put(bucket, key).await.unwrap();
 
         let successful_writes = PART_SIZE * MAX_S3_MULTIPART_UPLOAD_PARTS / write_size;
         let data = vec![0xaa; write_size];

@@ -23,10 +23,9 @@ async fn test_delete_object() {
         .await
         .unwrap();
 
-    let endpoint_config = get_test_endpoint_config();
-    let client: S3CrtClient = get_test_client(endpoint_config.clone());
+    let client: S3CrtClient = get_test_client();
     let _result = client
-        .delete_object(&bucket, &key, endpoint_config)
+        .delete_object(&bucket, &key)
         .await
         .expect("delete_object should succeed");
 
@@ -57,10 +56,9 @@ async fn test_delete_object_no_obj() {
         .expect_err("object should not exist");
     assert!(head_obj_err.into_service_error().is_not_found());
 
-    let endpoint_config = get_test_endpoint_config();
-    let client: S3CrtClient = get_test_client(endpoint_config.clone());
+    let client: S3CrtClient = get_test_client();
     let _result = client
-        .delete_object(&bucket, &key, endpoint_config)
+        .delete_object(&bucket, &key)
         .await
         .expect("delete_object should not fail for non-existent object");
 }
@@ -71,10 +69,9 @@ async fn test_delete_object_404_bucket() {
 
     let key = format!("{prefix}/nonexistent_key");
 
-    let endpoint_config = get_test_endpoint_config();
-    let client: S3CrtClient = get_test_client(endpoint_config.clone());
+    let client: S3CrtClient = get_test_client();
 
-    let result = client.delete_object("DOC-EXAMPLE-BUCKET", &key, endpoint_config).await;
+    let result = client.delete_object("DOC-EXAMPLE-BUCKET", &key).await;
     assert!(matches!(
         result,
         Err(ObjectClientError::ServiceError(DeleteObjectError::NoSuchBucket))
@@ -88,10 +85,9 @@ async fn test_delete_object_no_perm() {
 
     let key = format!("{prefix}/some_key");
 
-    let endpoint_config = get_test_endpoint_config();
-    let client: S3CrtClient = get_test_client(endpoint_config.clone());
+    let client: S3CrtClient = get_test_client();
 
-    let result = client.delete_object(&bucket, &key, endpoint_config).await;
+    let result = client.delete_object(&bucket, &key).await;
 
     if let Err(ObjectClientError::ClientError(S3RequestError::ResponseError(err))) = &result {
         assert!(err.response_status == 403);

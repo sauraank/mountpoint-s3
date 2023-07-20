@@ -11,7 +11,7 @@ use crate::prefix::Prefix;
 use fuser::{
     FileAttr, Filesystem, KernelConfig, ReplyAttr, ReplyData, ReplyEmpty, ReplyEntry, ReplyOpen, ReplyWrite, Request,
 };
-use mountpoint_s3_client::{EndpointConfig, ObjectClient};
+use mountpoint_s3_client::ObjectClient;
 
 pub mod session;
 
@@ -26,15 +26,8 @@ where
     Client: ObjectClient + Send + Sync + 'static,
     Runtime: Spawn + Send + Sync,
 {
-    pub fn new(
-        client: Client,
-        runtime: Runtime,
-        bucket: &str,
-        prefix: &Prefix,
-        config: S3FilesystemConfig,
-        endpoint_config: EndpointConfig,
-    ) -> Self {
-        let fs = S3Filesystem::new(client, runtime, bucket, prefix, config, endpoint_config);
+    pub fn new(client: Client, runtime: Runtime, bucket: &str, prefix: &Prefix, config: S3FilesystemConfig) -> Self {
+        let fs = S3Filesystem::new(client, runtime, bucket, prefix, config);
 
         Self { fs }
     }

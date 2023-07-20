@@ -33,14 +33,12 @@ fn main() {
     let delimiter = matches.get_one::<String>("delimiter").unwrap();
     let prefix = matches.get_one::<String>("prefix").unwrap();
     let region = matches.get_one::<String>("region").unwrap();
-    let endpoint_config = EndpointConfig::new().bucket(bucket).region(region);
 
-    let client = S3CrtClient::new(S3ClientConfig::new().endpoint_config(endpoint_config.clone()))
-        .expect("couldn't create client");
+    let endpoint_config = EndpointConfig::new(region);
+    let client =
+        S3CrtClient::new(S3ClientConfig::new().endpoint_config(endpoint_config)).expect("couldn't create client");
 
-    let result =
-        futures::executor::block_on(client.list_objects(bucket, None, delimiter, 500, prefix, endpoint_config))
-            .unwrap();
+    let result = futures::executor::block_on(client.list_objects(bucket, None, delimiter, 500, prefix)).unwrap();
 
     for object in result.objects {
         println!("{object:?}");

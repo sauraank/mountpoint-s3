@@ -9,7 +9,7 @@ use std::time::{Duration, UNIX_EPOCH};
 use tracing::{debug, error, trace, warn};
 
 use fuser::{FileAttr, KernelConfig};
-use mountpoint_s3_client::{ETag, EndpointConfig, ObjectClient};
+use mountpoint_s3_client::{ETag, ObjectClient};
 
 use crate::inode::{Inode, InodeError, InodeKind, LookedUp, ReaddirHandle, Superblock, WriteHandle};
 use crate::prefetch::checksummed_bytes::IntegrityError;
@@ -199,7 +199,6 @@ pub struct S3Filesystem<Client: ObjectClient, Runtime> {
     config: S3FilesystemConfig,
     client: Arc<Client>,
     superblock: Superblock,
-    endpoint_config: EndpointConfig,
     prefetcher: Prefetcher<Client, Runtime>,
     uploader: Uploader<Client>,
     bucket: String,
@@ -215,14 +214,7 @@ where
     Client: ObjectClient + Send + Sync + 'static,
     Runtime: Spawn + Send + Sync,
 {
-    pub fn new(
-        client: Client,
-        runtime: Runtime,
-        bucket: &str,
-        prefix: &Prefix,
-        config: S3FilesystemConfig,
-        endpoint_config: EndpointConfig,
-    ) -> Self {
+    pub fn new(client: Client, runtime: Runtime, bucket: &str, prefix: &Prefix, config: S3FilesystemConfig) -> Self {
         let superblock = Superblock::new(bucket, prefix, config.cache_config.clone());
 
         let client = Arc::new(client);
@@ -241,7 +233,6 @@ where
             next_handle: AtomicU64::new(1),
             dir_handles: AsyncRwLock::new(HashMap::new()),
             file_handles: AsyncRwLock::new(HashMap::new()),
-            endpoint_config,
         }
     }
 
@@ -347,7 +338,7 @@ where
     pub async fn lookup(&self, parent: InodeNo, name: &OsStr) -> Result<Entry, libc::c_int> {
         trace!("fs:lookup with parent {:?} name {:?}", parent, name);
 
-        let lookup = self.superblock.lookup(&self.client, parent, name, self.endpoint_config.clone()).await?;
+        let lookup = self.superblock.lookup(&self.client, parent, name).await?;
         let attr = self.make_attr(&lookup);
         Ok(Entry {
             ttl: lookup.validity(),
@@ -359,7 +350,7 @@ where
     pub async fn getattr(&self, ino: InodeNo) -> Result<Attr, libc::c_int> {
         trace!("fs:getattr with ino {:?}", ino);
 
-        let lookup = self.superblock.getattr(&self.client, ino, false, self.endpoint_config.clone()).await?;
+        let lookup = self.superblock.getattr(&self.client, ino, false).await?;
         let attr = self.make_attr(&lookup);
 
         Ok(Attr {
@@ -376,7 +367,7 @@ where
     pub async fn open(&self, ino: InodeNo, flags: i32) -> Result<Opened, libc::c_int> {
         trace!("fs:open with ino {:?} flags {:?}", ino, flags);
 
-        let lookup = self.superblock.getattr(&self.client, ino, true, self.endpoint_config.clone()).await?;
+        let lookup = self.superblock.getattr(&self.client, ino, true).await?;
 
         match lookup.inode.kind() {
             InodeKind::Directory => return Err(libc::EISDIR),
@@ -402,7 +393,7 @@ where
                 }
             };
             let key = lookup.inode.full_key();
-            match self.uploader.put(&self.bucket, key, self.endpoint_config.clone()).await {
+            match self.uploader.put(&self.bucket, key).await {
                 Err(e) => {
                     error!(key, "put failed to start: {e:?}");
                     return Err(libc::EIO);
@@ -473,13 +464,10 @@ where
         };
 
         if request.is_none() {
-            *request = Some(self.prefetcher.get(
-                &self.bucket,
-                &handle.full_key,
-                handle.object_size,
-                file_etag,
-                self.endpoint_config.clone(),
-            ));
+            *request = Some(
+                self.prefetcher
+                    .get(&self.bucket, &handle.full_key, handle.object_size, file_etag),
+            );
         }
 
         match request.as_mut().unwrap().read(offset as u64, size as usize).await {
@@ -513,7 +501,7 @@ where
 
         let lookup = self
             .superblock
-            .create(&self.client, parent, name, InodeKind::File, self.endpoint_config.clone())
+            .create(&self.client, parent, name, InodeKind::File)
             .await?;
         let attr = self.make_attr(&lookup);
         Ok(Entry {
@@ -532,7 +520,7 @@ where
     ) -> Result<Entry, libc::c_int> {
         let lookup = self
             .superblock
-            .create(&self.client, parent, name, InodeKind::Directory, self.endpoint_config.clone())
+            .create(&self.client, parent, name, InodeKind::Directory)
             .await?;
         let attr = self.make_attr(&lookup);
         Ok(Entry {
@@ -578,7 +566,7 @@ where
     pub async fn opendir(&self, parent: InodeNo, _flags: i32) -> Result<Opened, libc::c_int> {
         trace!("fs:opendir with parent {:?} flags {:?}", parent, _flags);
 
-        let inode_handle = self.superblock.readdir(&self.client, parent, 1000, self.endpoint_config.clone()).await?;
+        let inode_handle = self.superblock.readdir(&self.client, parent, 1000).await?;
 
         let fh = self.next_handle();
         let handle = DirHandle {
@@ -638,7 +626,7 @@ where
         }
 
         if dir_handle.offset() < 1 {
-            let lookup = self.superblock.getattr(&self.client, parent, false, self.endpoint_config.clone()).await?;
+            let lookup = self.superblock.getattr(&self.client, parent, false).await?;
             let attr = self.make_attr(&lookup);
             if reply.add(parent, dir_handle.offset() + 1, ".", attr, 0u64, lookup.validity()) {
                 return Ok(reply);
@@ -648,7 +636,7 @@ where
         if dir_handle.offset() < 2 {
             let lookup = self
                 .superblock
-                .getattr(&self.client, dir_handle.handle.parent(), false, self.endpoint_config.clone())
+                .getattr(&self.client, dir_handle.handle.parent(), false)
                 .await?;
             let attr = self.make_attr(&lookup);
             if reply.add(
@@ -755,7 +743,7 @@ where
     }
 
     pub async fn rmdir(&self, parent_ino: InodeNo, name: &OsStr) -> Result<(), libc::c_int> {
-        self.superblock.rmdir(&self.client, parent_ino, name, self.endpoint_config.clone()).await?;
+        self.superblock.rmdir(&self.client, parent_ino, name).await?;
         Ok(())
     }
 
@@ -765,7 +753,7 @@ where
     }
 
     pub async fn unlink(&self, parent_ino: InodeNo, name: &OsStr) -> Result<(), libc::c_int> {
-        match self.superblock.unlink(&self.client, parent_ino, name, self.endpoint_config.clone()).await {
+        match self.superblock.unlink(&self.client, parent_ino, name).await {
             Ok(()) => Ok(()),
             Err(e) => {
                 error!(parent=?parent_ino, ?name, "unlink failed: {e:?}");

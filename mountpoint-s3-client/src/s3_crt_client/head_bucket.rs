@@ -1,5 +1,5 @@
 use crate::object_client::{ObjectClientError, ObjectClientResult};
-use crate::{EndpointConfig, S3CrtClient, S3RequestError};
+use crate::{S3CrtClient, S3RequestError};
 use mountpoint_s3_crt::s3::client::{MetaRequestResult, MetaRequestType};
 use thiserror::Error;
 use tracing::debug;
@@ -18,16 +18,11 @@ pub enum HeadBucketError {
 }
 
 impl S3CrtClient {
-    pub async fn head_bucket(
-        &self,
-        bucket: &str,
-        endpoint_config: EndpointConfig,
-    ) -> ObjectClientResult<(), HeadBucketError, S3RequestError> {
-        let endpoint_config = endpoint_config.bucket(bucket);
+    pub async fn head_bucket(&self, bucket: &str) -> ObjectClientResult<(), HeadBucketError, S3RequestError> {
         let body = {
             let mut message = self
                 .inner
-                .new_request_template("HEAD", endpoint_config)
+                .new_request_template("HEAD", bucket)
                 .map_err(S3RequestError::construction_failure)?;
 
             message

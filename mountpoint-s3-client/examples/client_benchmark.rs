@@ -63,8 +63,8 @@ fn main() {
         .map(|s| s.parse::<usize>().expect("iterations must be a number"));
     let region = matches.get_one::<String>("region").unwrap();
 
-    let endpoint_config = EndpointConfig::new().bucket(bucket).region(region);
-    let mut config = S3ClientConfig::new().endpoint_config(endpoint_config).clone();
+    let endpoint_config = EndpointConfig::new(region);
+    let mut config = S3ClientConfig::new().endpoint_config(endpoint_config);
     if let Some(throughput_target_gbps) = throughput_target_gbps {
         config = config.throughput_target_gbps(throughput_target_gbps);
     }
@@ -80,13 +80,7 @@ fn main() {
         let received_size_clone = Arc::clone(&received_size);
         futures::executor::block_on(async move {
             let mut request = client
-                .get_object(
-                    bucket,
-                    key,
-                    None,
-                    None,
-                    EndpointConfig::new().bucket(bucket).region(region),
-                )
+                .get_object(bucket, key, None, None)
                 .await
                 .expect("couldn't create get request");
             loop {

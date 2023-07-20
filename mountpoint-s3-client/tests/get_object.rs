@@ -38,11 +38,10 @@ async fn test_get_object(size: usize, range: Option<Range<u64>>) {
         .await
         .unwrap();
 
-    let endpoint_config = get_test_endpoint_config();
-    let client: S3CrtClient = get_test_client(endpoint_config.clone());
+    let client: S3CrtClient = get_test_client();
 
     let result = client
-        .get_object(&bucket, &key, range.clone(), None, endpoint_config)
+        .get_object(&bucket, &key, range.clone(), None)
         .await
         .expect("get_object should succeed");
     let expected = match range {
@@ -58,11 +57,10 @@ async fn test_get_object_404_key() {
 
     let key = format!("{prefix}/nonexistent_key");
 
-    let endpoint_config = get_test_endpoint_config();
-    let client: S3CrtClient = get_test_client(endpoint_config.clone());
+    let client: S3CrtClient = get_test_client();
 
     let mut result = client
-        .get_object(&bucket, &key, None, None, endpoint_config)
+        .get_object(&bucket, &key, None, None)
         .await
         .expect("get_object should succeed");
     let next = StreamExt::next(&mut result).await.expect("stream needs to return Err");
@@ -80,11 +78,10 @@ async fn test_get_object_404_bucket() {
 
     let key = format!("{prefix}/nonexistent_key");
 
-    let endpoint_config = get_test_endpoint_config();
-    let client: S3CrtClient = get_test_client(endpoint_config.clone());
+    let client: S3CrtClient = get_test_client();
 
     let mut result = client
-        .get_object("DOC-EXAMPLE-BUCKET", &key, None, None, endpoint_config)
+        .get_object("DOC-EXAMPLE-BUCKET", &key, None, None)
         .await
         .expect("get_object failed");
     let next = StreamExt::next(&mut result).await.expect("stream needs to return Err");
@@ -111,12 +108,11 @@ async fn test_get_object_success_if_match() {
         .await
         .unwrap();
 
-    let endpoint_config = get_test_endpoint_config();
-    let client: S3CrtClient = get_test_client(endpoint_config.clone());
+    let client: S3CrtClient = get_test_client();
     let etag = Some(ETag::from_str(response.e_tag().expect("E-Tag should be set")).unwrap());
 
     let result = client
-        .get_object(&bucket, &key, None, etag, endpoint_config)
+        .get_object(&bucket, &key, None, etag)
         .await
         .expect("get_object should succeed");
     check_get_result(result, None, &body[..]).await;
@@ -139,12 +135,11 @@ async fn test_get_object_412_if_match() {
         .await
         .unwrap();
 
-    let endpoint_config = get_test_endpoint_config();
-    let client: S3CrtClient = get_test_client(endpoint_config.clone());
+    let client: S3CrtClient = get_test_client();
     let etag = Some(ETag::from_str("incorrect_etag").unwrap());
 
     let mut result = client
-        .get_object(&bucket, &key, None, etag, endpoint_config)
+        .get_object(&bucket, &key, None, etag)
         .await
         .expect("get_object should succeed");
 

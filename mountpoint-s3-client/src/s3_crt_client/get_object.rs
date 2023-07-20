@@ -16,7 +16,6 @@ use tracing::debug;
 use crate::object_client::{GetBodyPart, GetObjectError, ObjectClientError};
 use crate::s3_crt_client::S3HttpRequest;
 use crate::ETag;
-use crate::EndpointConfig;
 use crate::{ObjectClientResult, S3CrtClient, S3RequestError};
 
 impl S3CrtClient {
@@ -28,17 +27,15 @@ impl S3CrtClient {
         key: &str,
         range: Option<Range<u64>>,
         if_match: Option<ETag>,
-        endpoint_config: EndpointConfig,
     ) -> Result<S3GetObjectRequest, ObjectClientError<GetObjectError, S3RequestError>> {
         let span = request_span!(self.inner, "get_object");
         span.in_scope(
             || debug!(?bucket, ?key, ?range, ?if_match, size=?range.as_ref().map(|range| range.end - range.start), "new request"),
         );
 
-        let endpoint_config = endpoint_config.bucket(bucket);
         let mut message = self
             .inner
-            .new_request_template("GET", endpoint_config)
+            .new_request_template("GET", bucket)
             .map_err(S3RequestError::construction_failure)?;
 
         // Overwrite "accept" header since this returns raw object data.

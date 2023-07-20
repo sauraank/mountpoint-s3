@@ -107,8 +107,7 @@ async fn test_with_checksum(checksum_algorithm: ChecksumAlgorithm) {
         .await
         .unwrap();
 
-    let endpoint_config = get_test_endpoint_config();
-    let client: S3CrtClient = get_test_client(endpoint_config.clone());
+    let client: S3CrtClient = get_test_client();
 
     let object_attributes = vec![
         ObjectAttribute::ETag,
@@ -119,7 +118,7 @@ async fn test_with_checksum(checksum_algorithm: ChecksumAlgorithm) {
     ];
 
     let result = client
-        .get_object_attributes(&bucket, &key, None, None, object_attributes.as_ref(), endpoint_config)
+        .get_object_attributes(&bucket, &key, None, None, object_attributes.as_ref())
         .await;
 
     let result = result.unwrap();
@@ -171,8 +170,7 @@ async fn test_get_attributes() {
         .await
         .unwrap();
 
-    let endpoint_config = get_test_endpoint_config();
-    let client: S3CrtClient = get_test_client(endpoint_config.clone());
+    let client: S3CrtClient = get_test_client();
 
     let object_attributes = vec![
         ObjectAttribute::ETag,
@@ -183,7 +181,7 @@ async fn test_get_attributes() {
     ];
 
     let result = client
-        .get_object_attributes(&bucket, &key, None, None, object_attributes.as_ref(), endpoint_config)
+        .get_object_attributes(&bucket, &key, None, None, object_attributes.as_ref())
         .await;
 
     let result = result.unwrap();
@@ -224,13 +222,12 @@ async fn test_get_attributes_all_none() {
         .await
         .unwrap();
 
-    let endpoint_config = get_test_endpoint_config();
-    let client: S3CrtClient = get_test_client(endpoint_config.clone());
+    let client: S3CrtClient = get_test_client();
 
     let object_attributes = vec![ObjectAttribute::ObjectParts];
 
     let result = client
-        .get_object_attributes(&bucket, &key, None, None, object_attributes.as_ref(), endpoint_config)
+        .get_object_attributes(&bucket, &key, None, None, object_attributes.as_ref())
         .await;
 
     let result = result.unwrap();
@@ -252,8 +249,7 @@ async fn test_get_attributes_mpu() {
 
     let (_completed_parts, complete_mpu_output) = create_mpu_object(&bucket, &key, &parts_size, None).await;
 
-    let endpoint_config = get_test_endpoint_config();
-    let client: S3CrtClient = get_test_client(endpoint_config.clone());
+    let client: S3CrtClient = get_test_client();
 
     let object_attributes = vec![
         ObjectAttribute::ETag,
@@ -264,7 +260,7 @@ async fn test_get_attributes_mpu() {
     ];
 
     let result = client
-        .get_object_attributes(&bucket, &key, None, None, object_attributes.as_ref(), endpoint_config)
+        .get_object_attributes(&bucket, &key, None, None, object_attributes.as_ref())
         .await;
 
     let result = result.unwrap();
@@ -299,8 +295,7 @@ async fn test_get_attributes_mpu_with_checksum() {
     let (completed_parts, complete_mpu_output) =
         create_mpu_object(&bucket, &key, &parts_size, Some(ChecksumAlgorithm::Crc32C)).await;
 
-    let endpoint_config = get_test_endpoint_config();
-    let client: S3CrtClient = get_test_client(endpoint_config.clone());
+    let client: S3CrtClient = get_test_client();
 
     let object_attributes = vec![
         ObjectAttribute::ETag,
@@ -311,7 +306,7 @@ async fn test_get_attributes_mpu_with_checksum() {
     ];
 
     let result = client
-        .get_object_attributes(&bucket, &key, None, None, object_attributes.as_slice(), endpoint_config)
+        .get_object_attributes(&bucket, &key, None, None, object_attributes.as_slice())
         .await;
 
     let result = result.unwrap();
@@ -367,22 +362,14 @@ async fn test_get_attributes_mpu_pagination() {
     let (completed_parts, _complete_mpu_output) =
         create_mpu_object(&bucket, &key, &parts_size, Some(ChecksumAlgorithm::Sha256)).await;
 
-    let endpoint_config = get_test_endpoint_config();
-    let client: S3CrtClient = get_test_client(endpoint_config.clone());
+    let client: S3CrtClient = get_test_client();
 
     let object_attributes = vec![ObjectAttribute::ObjectParts];
 
     // Get the first page with only one part
     let max_parts = 1;
     let result = client
-        .get_object_attributes(
-            &bucket,
-            &key,
-            Some(max_parts),
-            None,
-            object_attributes.as_slice(),
-            endpoint_config.clone(),
-        )
+        .get_object_attributes(&bucket, &key, Some(max_parts), None, object_attributes.as_slice())
         .await;
 
     let result = result.unwrap();
@@ -412,7 +399,6 @@ async fn test_get_attributes_mpu_pagination() {
             None,
             object_parts.next_part_number_marker,
             object_attributes.as_ref(),
-            endpoint_config,
         )
         .await;
 
@@ -442,12 +428,11 @@ async fn test_get_attributes_404_key() {
 
     let key = format!("{prefix}/nonexistent_key");
 
-    let endpoint_config = get_test_endpoint_config();
-    let client: S3CrtClient = get_test_client(endpoint_config.clone());
+    let client: S3CrtClient = get_test_client();
     let object_attributes = vec![ObjectAttribute::ETag];
 
     let result = client
-        .get_object_attributes(&bucket, &key, None, None, object_attributes.as_ref(), endpoint_config)
+        .get_object_attributes(&bucket, &key, None, None, object_attributes.as_ref())
         .await;
     assert!(matches!(
         result,
@@ -461,19 +446,11 @@ async fn test_get_attributes_404_bucket() {
 
     let key = format!("{prefix}/nonexistent_key");
 
-    let endpoint_config = get_test_endpoint_config();
-    let client: S3CrtClient = get_test_client(endpoint_config.clone());
+    let client: S3CrtClient = get_test_client();
     let object_attributes = vec![ObjectAttribute::ETag];
 
     let result = client
-        .get_object_attributes(
-            "nonexistent_bucket",
-            &key,
-            None,
-            None,
-            object_attributes.as_ref(),
-            endpoint_config,
-        )
+        .get_object_attributes("nonexistent_bucket", &key, None, None, object_attributes.as_ref())
         .await;
     assert!(matches!(
         result,
@@ -488,12 +465,11 @@ async fn test_get_attributes_no_perm() {
 
     let key = format!("{prefix}/some_key");
 
-    let endpoint_config = get_test_endpoint_config();
-    let client: S3CrtClient = get_test_client(endpoint_config.clone());
+    let client: S3CrtClient = get_test_client();
     let object_attributes = vec![ObjectAttribute::ETag];
 
     let result = client
-        .get_object_attributes(&bucket, &key, None, None, object_attributes.as_ref(), endpoint_config)
+        .get_object_attributes(&bucket, &key, None, None, object_attributes.as_ref())
         .await;
 
     if let Err(ObjectClientError::ClientError(S3RequestError::ResponseError(err))) = &result {

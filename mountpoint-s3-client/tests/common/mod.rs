@@ -17,11 +17,8 @@ fn init_tracing_subscriber() {
     let _ = tracing_subscriber::fmt::try_init();
 }
 
-pub fn get_test_endpoint_config() -> EndpointConfig {
-    EndpointConfig::new().region(&get_test_region())
-}
-
-pub fn get_test_client(endpoint_config: EndpointConfig) -> S3CrtClient {
+pub fn get_test_client() -> S3CrtClient {
+    let endpoint_config = EndpointConfig::new(&get_test_region());
     S3CrtClient::new(S3ClientConfig::new().endpoint_config(endpoint_config)).expect("could not create test client")
 }
 
@@ -135,7 +132,7 @@ macro_rules! object_client_test {
         mod $test_fn_identifier {
             use super::$test_fn_identifier;
             use mountpoint_s3_client::mock_client::{MockClient, MockClientConfig};
-            use $crate::{get_test_bucket_and_prefix, get_test_client, get_test_endpoint_config};
+            use $crate::{get_test_bucket_and_prefix, get_test_client};
 
             #[tokio::test]
             async fn mock() {
@@ -152,7 +149,7 @@ macro_rules! object_client_test {
             #[tokio::test]
             async fn rust_crt() {
                 let (bucket, prefix) = get_test_bucket_and_prefix(stringify!($test_fn_identifier));
-                let client = get_test_client(get_test_endpoint_config());
+                let client = get_test_client();
 
                 $test_fn_identifier(&client, &bucket, &prefix).await;
             }

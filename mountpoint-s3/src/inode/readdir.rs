@@ -38,7 +38,7 @@
 use std::cmp::Ordering;
 use std::collections::VecDeque;
 
-use mountpoint_s3_client::{EndpointConfig, ObjectClient, ObjectInfo};
+use mountpoint_s3_client::{ObjectClient, ObjectInfo};
 use tracing::{error, trace, warn};
 
 use crate::sync::{Arc, AsyncMutex, Mutex};
@@ -64,7 +64,6 @@ impl ReaddirHandle {
         parent_ino: InodeNo,
         full_path: String,
         page_size: usize,
-        endpoint_config: EndpointConfig,
     ) -> Result<Self, InodeError> {
         let local_entries = {
             let inode = inner.get(dir_ino)?;
@@ -92,13 +91,7 @@ impl ReaddirHandle {
             }
         };
 
-        let iter = ReaddirIter::new(
-            &inner.bucket,
-            &full_path,
-            page_size,
-            local_entries.into(),
-            endpoint_config,
-        );
+        let iter = ReaddirIter::new(&inner.bucket, &full_path, page_size, local_entries.into());
 
         Ok(Self {
             inner,
@@ -280,15 +273,9 @@ struct ReaddirIter {
 }
 
 impl ReaddirIter {
-    fn new(
-        bucket: &str,
-        full_path: &str,
-        page_size: usize,
-        local_entries: VecDeque<ReaddirEntry>,
-        endpoint_config: EndpointConfig,
-    ) -> Self {
+    fn new(bucket: &str, full_path: &str, page_size: usize, local_entries: VecDeque<ReaddirEntry>) -> Self {
         Self {
-            remote: RemoteIter::new(bucket, full_path, page_size, endpoint_config),
+            remote: RemoteIter::new(bucket, full_path, page_size),
             local: LocalIter::new(local_entries),
             next_remote: None,
             next_local: None,
@@ -362,18 +349,16 @@ struct RemoteIter {
     full_path: String,
     page_size: usize,
     state: RemoteIterState,
-    endpoint_config: EndpointConfig,
 }
 
 impl RemoteIter {
-    fn new(bucket: &str, full_path: &str, page_size: usize, endpoint_config: EndpointConfig) -> Self {
+    fn new(bucket: &str, full_path: &str, page_size: usize) -> Self {
         Self {
             entries: VecDeque::new(),
             bucket: bucket.to_owned(),
             full_path: full_path.to_owned(),
             page_size,
             state: RemoteIterState::InProgress(None),
-            endpoint_config,
         }
     }
 
@@ -396,7 +381,6 @@ impl RemoteIter {
                     "/",
                     self.page_size,
                     self.full_path.as_str(),
-                    self.endpoint_config.clone(),
                 )
                 .await
                 .map_err(|e| InodeError::ClientError(anyhow::Error::new(e)))?;

@@ -5,7 +5,8 @@ pub mod common;
 use aws_sdk_s3::types::ByteStream;
 use bytes::Bytes;
 use common::*;
-use mountpoint_s3_client::{AddressingStyle, Endpoint, EndpointConfig, ObjectClient, S3ClientConfig, S3CrtClient};
+use mountpoint_s3_client::{AddressingStyle, EndpointConfig, ObjectClient, S3ClientConfig, S3CrtClient};
+use mountpoint_s3_crt::common::{allocator::Allocator, uri::Uri};
 use test_case::test_case;
 
 async fn run_test<F: FnOnce(&str) -> EndpointConfig>(f: F) {
@@ -30,7 +31,7 @@ async fn run_test<F: FnOnce(&str) -> EndpointConfig>(f: F) {
     let client = S3CrtClient::new(config).expect("could not create test client");
 
     let result = client
-        .get_object(&bucket, &key, None, None, endpoint_config)
+        .get_object(&bucket, &key, None, None)
         .await
         .expect("get_object should succeed");
     check_get_result(result, None, &body[..]).await;
@@ -41,7 +42,7 @@ async fn run_test<F: FnOnce(&str) -> EndpointConfig>(f: F) {
 #[test_case(AddressingStyle::Path)]
 #[tokio::test]
 async fn test_addressing_style_region(addressing_style: AddressingStyle) {
-    run_test(|region| EndpointConfig::new().region(region).addressing_style(addressing_style)).await;
+    run_test(|region| EndpointConfig::new(region).addressing_style(addressing_style)).await;
 }
 
 #[test_case(AddressingStyle::Automatic)]
@@ -51,9 +52,8 @@ async fn test_addressing_style_region(addressing_style: AddressingStyle) {
 async fn test_addressing_style_uri(addressing_style: AddressingStyle) {
     run_test(|region| {
         let uri = format!("https://s3.{region}.amazonaws.com");
-        let endpoint = Endpoint::from_uri(&uri).unwrap();
-        EndpointConfig::new()
-            .region(region)
+        let endpoint = Uri::new_from_str(&Allocator::default(), uri).expect("Uri Could not be parsed");
+        EndpointConfig::new(region)
             .addressing_style(addressing_style)
             .endpoint(endpoint)
     })
@@ -67,9 +67,8 @@ async fn test_addressing_style_uri(addressing_style: AddressingStyle) {
 async fn test_addressing_style_uri_dualstack(addressing_style: AddressingStyle) {
     run_test(|region| {
         let uri = format!("https://s3.dualstack.{region}.amazonaws.com");
-        let endpoint = Endpoint::from_uri(&uri).unwrap();
-        EndpointConfig::new()
-            .region(region)
+        let endpoint = Uri::new_from_str(&Allocator::default(), uri).expect("Uri Could not be parsed");
+        EndpointConfig::new(region)
             .addressing_style(addressing_style)
             .endpoint(endpoint)
     })
@@ -82,9 +81,8 @@ async fn test_addressing_style_uri_dualstack(addressing_style: AddressingStyle) 
 async fn test_addressing_style_uri_fips(addressing_style: AddressingStyle) {
     run_test(|region| {
         let uri = format!("https://s3-fips.{region}.amazonaws.com");
-        let endpoint = Endpoint::from_uri(&uri).unwrap();
-        EndpointConfig::new()
-            .region(region)
+        let endpoint = Uri::new_from_str(&Allocator::default(), uri).expect("Uri Could not be parsed");
+        EndpointConfig::new(region)
             .addressing_style(addressing_style)
             .endpoint(endpoint)
     })
@@ -96,9 +94,8 @@ async fn test_addressing_style_uri_fips(addressing_style: AddressingStyle) {
 async fn test_addressing_style_uri_fips_dualstack(addressing_style: AddressingStyle) {
     run_test(|region| {
         let uri = format!("https://s3-fips.dualstack.{region}.amazonaws.com");
-        let endpoint = Endpoint::from_uri(&uri).unwrap();
-        EndpointConfig::new()
-            .region(region)
+        let endpoint = Uri::new_from_str(&Allocator::default(), uri).expect("Uri Could not be parsed");
+        EndpointConfig::new(region)
             .addressing_style(addressing_style)
             .endpoint(endpoint)
     })

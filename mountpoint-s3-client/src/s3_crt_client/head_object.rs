@@ -11,7 +11,7 @@ use tracing::{debug, error};
 
 use crate::object_client::{HeadObjectError, HeadObjectResult, ObjectClientError, ObjectClientResult, ObjectInfo};
 use crate::s3_crt_client::S3RequestError;
-use crate::{EndpointConfig, S3CrtClient};
+use crate::S3CrtClient;
 
 #[derive(Error, Debug)]
 #[non_exhaustive]
@@ -62,13 +62,11 @@ impl S3CrtClient {
         &self,
         bucket: &str,
         key: &str,
-        endpoint_config: EndpointConfig,
     ) -> ObjectClientResult<HeadObjectResult, HeadObjectError, S3RequestError> {
-        let endpoint_config = endpoint_config.bucket(bucket);
         let request = {
             let mut message = self
                 .inner
-                .new_request_template("HEAD", endpoint_config)
+                .new_request_template("HEAD", bucket)
                 .map_err(S3RequestError::construction_failure)?;
 
             let key = key.to_string();

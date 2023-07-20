@@ -5,7 +5,7 @@ use mountpoint_s3_crt::s3::client::{MetaRequestResult, MetaRequestType};
 use tracing::debug;
 
 use crate::object_client::{DeleteObjectError, DeleteObjectResult, ObjectClientError};
-use crate::{EndpointConfig, ObjectClientResult, S3CrtClient, S3RequestError};
+use crate::{ObjectClientResult, S3CrtClient, S3RequestError};
 
 impl S3CrtClient {
     /// Create and begin a new DeleteObject request.
@@ -13,17 +13,15 @@ impl S3CrtClient {
         &self,
         bucket: &str,
         key: &str,
-        endpoint_config: EndpointConfig,
     ) -> ObjectClientResult<DeleteObjectResult, DeleteObjectError, S3RequestError> {
         let span = request_span!(self.inner, "delete_object");
         span.in_scope(|| debug!(?bucket, ?key, "new request"));
 
         // Scope the endpoint, message, etc. since otherwise rustc thinks we use Message across the await.
-        let endpoint_config = endpoint_config.bucket(bucket);
         let request = {
             let mut message = self
                 .inner
-                .new_request_template("DELETE", endpoint_config)
+                .new_request_template("DELETE", bucket)
                 .map_err(S3RequestError::construction_failure)?;
             message
                 .set_request_path(format!("/{key}"))

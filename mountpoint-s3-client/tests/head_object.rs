@@ -23,12 +23,8 @@ async fn test_head_object() {
         .await
         .unwrap();
 
-    let endpoint_config = get_test_endpoint_config();
-    let client: S3CrtClient = get_test_client(endpoint_config.clone());
-    let result = client
-        .head_object(&bucket, &key, endpoint_config)
-        .await
-        .expect("head_object failed");
+    let client: S3CrtClient = get_test_client();
+    let result = client.head_object(&bucket, &key).await.expect("head_object failed");
 
     assert_eq!(result.bucket, bucket);
     assert_eq!(result.object.key, key);
@@ -41,9 +37,8 @@ async fn test_head_object_404_key() {
 
     let key = format!("{prefix}/nonexistent_key");
 
-    let endpoint_config = get_test_endpoint_config();
-    let client: S3CrtClient = get_test_client(endpoint_config.clone());
-    let result = client.head_object(&bucket, &key, endpoint_config).await;
+    let client: S3CrtClient = get_test_client();
+    let result = client.head_object(&bucket, &key).await;
     assert!(matches!(
         result,
         Err(ObjectClientError::ServiceError(HeadObjectError::NotFound))
@@ -56,10 +51,9 @@ async fn test_head_object_404_bucket() {
 
     let key = format!("{prefix}/nonexistent_key");
 
-    let endpoint_config = get_test_endpoint_config();
-    let client: S3CrtClient = get_test_client(endpoint_config.clone());
+    let client: S3CrtClient = get_test_client();
 
-    let result = client.head_object("DOC-EXAMPLE-BUCKET", &key, endpoint_config).await;
+    let result = client.head_object("DOC-EXAMPLE-BUCKET", &key).await;
     assert!(matches!(
         result,
         Err(ObjectClientError::ServiceError(HeadObjectError::NotFound))

@@ -146,8 +146,8 @@ fn mount_file_system(bucket_name: &str, region: &str, throughput_target_gbps: Op
     let temp_dir = tempdir().expect("Should be able to create temp directory");
     let mountpoint = temp_dir.path();
 
-    let endpoint_config = EndpointConfig::new().bucket(bucket_name).region(region);
-    let mut config = S3ClientConfig::new().endpoint_config(endpoint_config.clone());
+    let endpoint_config = EndpointConfig::new(region);
+    let mut config = S3ClientConfig::new().endpoint_config(endpoint_config);
     if let Some(throughput_target_gbps) = throughput_target_gbps {
         config = config.throughput_target_gbps(throughput_target_gbps);
     }
@@ -165,14 +165,7 @@ fn mount_file_system(bucket_name: &str, region: &str, throughput_target_gbps: Op
         mountpoint.to_str().unwrap()
     );
     let session = Session::new(
-        S3FuseFilesystem::new(
-            client,
-            runtime,
-            bucket_name,
-            &Default::default(),
-            filesystem_config,
-            endpoint_config,
-        ),
+        S3FuseFilesystem::new(client, runtime, bucket_name, &Default::default(), filesystem_config),
         mountpoint,
         &options,
     )
