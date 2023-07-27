@@ -42,18 +42,18 @@ pub fn get_test_bucket() -> String {
     std::env::var("S3_BUCKET_NAME").expect("Set S3_BUCKET_NAME to run integration tests")
 }
 
-pub fn get_test_access_point_alias(arn: bool, access_point_type: AccessPointType) -> String {
+pub fn get_test_access_point(arn: bool, access_point_type: AccessPointType) -> String {
     match access_point_type {
         AccessPointType::SingleRegion => {
             if arn {
-                std::env::var("S3_ACCESS_POINT_ARN").expect("Set S3_ACCESS_POINT_ALIAS to run integration tests")
+                std::env::var("S3_ACCESS_POINT_ARN").expect("Set S3_ACCESS_POINT_ARN to run integration tests")
             } else {
                 std::env::var("S3_ACCESS_POINT_ALIAS").expect("Set S3_ACCESS_POINT_ALIAS to run integration tests")
             }
         }
         AccessPointType::ObjectLambda => {
             if arn {
-                std::env::var("S3_OLAP_ARN").expect("Set S3_OLAP_ALIAS to run integration tests")
+                std::env::var("S3_OLAP_ARN").expect("Set S3_OLAP_ARN to run integration tests")
             } else {
                 std::env::var("S3_OLAP_ALIAS").expect("Set S3_OLAP_ALIAS to run integration tests")
             }
@@ -62,7 +62,7 @@ pub fn get_test_access_point_alias(arn: bool, access_point_type: AccessPointType
             // Multi region accesspoints should only be accessed using their ARN
             // (since endpoint for alias needs to be in format `<mrap-alias>.accesspoint.s3-global.amazonaws.com`. But this endpoint could not be formed using
             // CRT endpoint resolver any bucket alias with '.' in it will be resolved in path style addressing. Similar is the case with CLI)
-            std::env::var("S3_MRAP_ARN").expect("Set S3_MRAP_ALIAS to run integration tests")
+            std::env::var("S3_MRAP_ARN").expect("Set S3_MRAP_ARN to run integration tests")
         }
     }
 }
