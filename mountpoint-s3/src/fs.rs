@@ -84,7 +84,7 @@ impl<Client: ObjectClient, Runtime> FileHandleType<Client, Runtime> {
         let key = lookup.inode.full_key();
         let handle = match fs.uploader.put(&fs.bucket, key).await {
             Err(e) => {
-                return Err(err!(libc::EIO, source:e, "put failed to start"));
+                return Err(err!(libc::EIO, source: e, "put failed to start"));
             }
             Ok(request) => FileHandleType::Write(UploadState::InProgress { request, handle }.into()),
         };
@@ -172,7 +172,7 @@ impl<Client: ObjectClient> UploadState<Client> {
                 debug!(key, size, "put succeeded");
                 Ok(())
             }
-            Err(e) => Err(err!(libc::EIO, source:e, "put failed")),
+            Err(e) => Err(err!(libc::EIO, source: e, "put failed")),
         };
         if let Err(err) = handle.finish_writing() {
             // Log the issue but still return put_result.
@@ -559,15 +559,15 @@ where
         match request.as_mut().unwrap().read(offset as u64, size as usize).await {
             Ok(checksummed_bytes) => match checksummed_bytes.into_bytes() {
                 Ok(bytes) => reply.data(&bytes),
-                Err(e) => reply.error(err!(libc::EIO, source:e, "integrity error")),
+                Err(e) => reply.error(err!(libc::EIO, source: e, "integrity error")),
             },
             Err(PrefetchReadError::GetRequestFailed(ObjectClientError::ServiceError(
                 GetObjectError::PreconditionFailed,
             ))) => reply.error(err!(libc::ESTALE, "object was mutated remotely")),
-            Err(PrefetchReadError::Integrity(e)) => reply.error(err!(libc::EIO, source:e, "integrity error")),
+            Err(PrefetchReadError::Integrity(e)) => reply.error(err!(libc::EIO, source: e, "integrity error")),
             Err(e @ PrefetchReadError::GetRequestFailed(_))
             | Err(e @ PrefetchReadError::GetRequestTerminatedUnexpectedly) => {
-                reply.error(err!(libc::EIO, source:e, "get request failed"))
+                reply.error(err!(libc::EIO, source: e, "get request failed"))
             }
         }
     }
@@ -784,7 +784,7 @@ where
         match request.complete(&file_handle.full_key).await {
             // According to the `fsync` man page we should return ENOSPC instead of EFBIG if it's a
             // space-related failure.
-            Err(e) if e.to_errno() == libc::EFBIG => Err(err!(libc::ENOSPC, source:e, "object too big")),
+            Err(e) if e.to_errno() == libc::EFBIG => Err(err!(libc::ENOSPC, source: e, "object too big")),
             ret => ret,
         }
     }
