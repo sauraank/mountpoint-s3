@@ -8,7 +8,7 @@ use common::*;
 use mountpoint_s3_client::{AddressingStyle, EndpointConfig, ObjectClient, S3ClientConfig, S3CrtClient};
 use test_case::test_case;
 
-async fn run_test<F: FnOnce(&str) -> EndpointConfig>(f: F, prefix: &str, bucket: &str) {
+async fn run_test<F: FnOnce(&str) -> EndpointConfig>(f: F, prefix: &str, bucket: String) {
     let sdk_client = get_test_sdk_client().await;
 
     // Create one object named "hello"
@@ -16,7 +16,7 @@ async fn run_test<F: FnOnce(&str) -> EndpointConfig>(f: F, prefix: &str, bucket:
     let body = b"hello world!";
     sdk_client
         .put_object()
-        .bucket(bucket)
+        .bucket(&bucket)
         .key(&key)
         .body(ByteStream::from(Bytes::from_static(body)))
         .send()
@@ -29,7 +29,7 @@ async fn run_test<F: FnOnce(&str) -> EndpointConfig>(f: F, prefix: &str, bucket:
     let client = S3CrtClient::new(config).expect("could not create test client");
 
     let result = client
-        .get_object(bucket, &key, None, None)
+        .get_object(&bucket, &key, None, None)
         .await
         .expect("get_object should succeed");
     check_get_result(result, None, &body[..]).await;
@@ -42,7 +42,7 @@ async fn test_addressing_style_region(addressing_style: AddressingStyle, prefix:
     run_test(
         |region| EndpointConfig::new(region).addressing_style(addressing_style),
         &get_unique_test_prefix(prefix),
-        &get_test_bucket(),
+        get_test_bucket(),
     )
     .await;
 }
@@ -54,7 +54,7 @@ async fn test_fips_mount_option() {
     run_test(
         |region| EndpointConfig::new(region).use_fips(true),
         &prefix,
-        &get_test_bucket(),
+        get_test_bucket(),
     )
     .await;
 }
@@ -67,7 +67,7 @@ async fn test_accelerate_mount_option() {
     run_test(
         |region| EndpointConfig::new(region).use_accelerate(true),
         &prefix,
-        &get_test_bucket(),
+        get_test_bucket(),
     )
     .await;
 }
@@ -84,7 +84,7 @@ async fn test_addressing_style_dualstack_option(addressing_style: AddressingStyl
                 .use_dual_stack(true)
         },
         &prefix,
-        &get_test_bucket(),
+        get_test_bucket(),
     )
     .await;
 }
@@ -96,12 +96,12 @@ async fn test_fips_dual_stack_mount_option() {
     run_test(
         |region| EndpointConfig::new(region).use_fips(true).use_dual_stack(true),
         &prefix,
-        &get_test_bucket(),
+        get_test_bucket(),
     )
     .await;
 }
 
-//#[cfg(feature = "access_points_tests")]
+#[cfg(feature = "access_points_tests")]
 #[test_case(AddressingStyle::Automatic, true, "test_accesspoint_arn")]
 #[test_case(AddressingStyle::Automatic, false, "test_accesspoint_alias")]
 #[test_case(AddressingStyle::Path, false, "test_accesspoint_alias")]
@@ -109,10 +109,10 @@ async fn test_fips_dual_stack_mount_option() {
 // Also, path-style addressing is not supported for Access Points. But it seems to be supported for single region access point for now.
 #[tokio::test]
 async fn test_single_region_access_point(addressing_style: AddressingStyle, arn: bool, prefix: &str) {
-    run_list_objects_test(
+    run_test(
         |region| EndpointConfig::new(region).addressing_style(addressing_style),
         &get_unique_test_prefix(prefix),
-        &get_test_access_point(arn, AccessPointType::SingleRegion),
+        get_test_access_point(arn, AccessPointType::SingleRegion),
     )
     .await;
 }
@@ -126,7 +126,7 @@ async fn run_list_objects_test<F: FnOnce(&str) -> EndpointConfig>(f: F, prefix: 
     let client = S3CrtClient::new(config).expect("could not create test client");
 
     client
-        .list_objects(bucket, None, "/", 10, &prefix)
+        .list_objects(bucket, None, "/", 10, prefix)
         .await
         .expect("list_object should succeed");
 }

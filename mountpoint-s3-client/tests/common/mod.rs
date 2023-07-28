@@ -38,6 +38,21 @@ pub fn get_test_client() -> S3CrtClient {
     S3CrtClient::new(S3ClientConfig::new().endpoint_config(endpoint_config)).expect("could not create test client")
 }
 
+pub fn get_test_bucket_and_prefix(test_name: &str) -> (String, String) {
+    let bucket = std::env::var("S3_BUCKET_NAME").expect("Set S3_BUCKET_NAME to run integration tests");
+
+    // Generate a random nonce to make sure this prefix is truly unique
+    let nonce = OsRng.next_u64();
+
+    // Prefix always has a trailing "/" to keep meaning in sync with the S3 API.
+    let prefix = std::env::var("S3_BUCKET_TEST_PREFIX").unwrap_or(String::from("mountpoint-test/"));
+    assert!(prefix.ends_with('/'), "S3_BUCKET_TEST_PREFIX should end in '/'");
+
+    let prefix = format!("{prefix}{test_name}/{nonce}/");
+
+    (bucket, prefix)
+}
+
 pub fn get_test_bucket() -> String {
     std::env::var("S3_BUCKET_NAME").expect("Set S3_BUCKET_NAME to run integration tests")
 }
