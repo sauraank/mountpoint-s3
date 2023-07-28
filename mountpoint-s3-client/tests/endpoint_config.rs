@@ -101,14 +101,15 @@ async fn test_fips_dual_stack_mount_option() {
     .await;
 }
 
-#[cfg(feature = "access_points_tests")]
+//#[cfg(feature = "access_points_tests")]
 #[test_case(AddressingStyle::Automatic, true, "test_accesspoint_arn")]
 #[test_case(AddressingStyle::Automatic, false, "test_accesspoint_alias")]
 #[test_case(AddressingStyle::Path, false, "test_accesspoint_alias")]
 // Path-style addressing cannot be used with ARN buckets for the endpoint resolution
+// Also, path-style addressing is not supported for Access Points. But it seems to be supported for single region access point for now.
 #[tokio::test]
 async fn test_single_region_access_point(addressing_style: AddressingStyle, arn: bool, prefix: &str) {
-    run_test(
+    run_list_objects_test(
         |region| EndpointConfig::new(region).addressing_style(addressing_style),
         &get_unique_test_prefix(prefix),
         &get_test_access_point(arn, AccessPointType::SingleRegion),
@@ -116,7 +117,7 @@ async fn test_single_region_access_point(addressing_style: AddressingStyle, arn:
     .await;
 }
 
-// For Object Labda Access Point, Lambda function needs to be configured to add API support for Put Object,
+// For Object Labda Access Point, PutObject is not supported,
 // For multi region access points, Rust SDK is not supported. Hence different helper method for these tests.
 async fn run_list_objects_test<F: FnOnce(&str) -> EndpointConfig>(f: F, prefix: &str, bucket: &str) {
     let region = get_test_region();
@@ -132,9 +133,8 @@ async fn run_list_objects_test<F: FnOnce(&str) -> EndpointConfig>(f: F, prefix: 
 
 #[cfg(feature = "access_points_tests")]
 #[test_case(false, "test_OLAP_alias")]
-//#[test_case(true, "test_OLAP_arn")]
-// Looking into each case of Object Lambda AccessPoint on why they are not working and will document the reasons
-// Path-style addressing cannot be used with ARN buckets for the endpoint resolution
+// Path-style addressing is not supported for Access points
+// Keeping the option of ARN, so that we can add ARN test case for object lambda access point later.
 #[tokio::test]
 async fn test_object_lambda_access_point(arn: bool, prefix: &str) {
     run_list_objects_test(
@@ -145,7 +145,8 @@ async fn test_object_lambda_access_point(arn: bool, prefix: &str) {
     .await;
 }
 
-// Multi-Region Access Point does not work with Path Style addressing
+// Path-style addressing is not supported for Access points
+// Only ARN is supported for Multi Region access point as AWS CLI.
 #[cfg(feature = "access_points_tests")]
 #[tokio::test]
 async fn test_multi_region_access_point() {
