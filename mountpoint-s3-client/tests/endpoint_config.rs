@@ -60,7 +60,7 @@ async fn test_use_fips() {
 }
 
 // Transfer acceleration do not work with path style
-#[cfg(feature = "tansfer_accelerate_tests")]
+#[cfg(feature = "s3_tests")]
 #[tokio::test]
 async fn test_use_accelerate() {
     let prefix = get_unique_test_prefix("test_transfer_acceleration");
@@ -101,7 +101,7 @@ async fn test_fips_dual_stack_mount_option() {
     .await;
 }
 
-#[cfg(feature = "access_points_tests")]
+#[cfg(feature = "s3_tests")]
 #[test_case(AddressingStyle::Automatic, true, "test_accesspoint_arn")]
 #[test_case(AddressingStyle::Automatic, false, "test_accesspoint_alias")]
 #[test_case(AddressingStyle::Path, false, "test_accesspoint_alias")]
@@ -131,7 +131,7 @@ async fn run_list_objects_test<F: FnOnce(&str) -> EndpointConfig>(f: F, prefix: 
         .expect("list_object should succeed");
 }
 
-#[cfg(feature = "access_points_tests")]
+#[cfg(feature = "s3_tests")]
 #[test_case(false, "test_OLAP_alias")]
 // Path-style addressing is not supported for Access points
 // Keeping the option of ARN, so that we can add ARN test case for object lambda access point later.
@@ -147,7 +147,7 @@ async fn test_object_lambda_access_point(arn: bool, prefix: &str) {
 
 // Path-style addressing is not supported for Access points
 // Only ARN is supported for Multi Region access point as AWS CLI.
-#[cfg(feature = "access_points_tests")]
+#[cfg(feature = "s3_tests")]
 #[tokio::test]
 async fn test_multi_region_access_point() {
     let prefix = "test_MRAP";
