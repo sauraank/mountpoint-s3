@@ -138,7 +138,7 @@ async fn run_list_objects_test<F: FnOnce(&str) -> EndpointConfig>(f: F, prefix: 
 #[tokio::test]
 async fn test_object_lambda_access_point(arn: bool, prefix: &str) {
     run_list_objects_test(
-        |region| EndpointConfig::new(region),
+        EndpointConfig::new,
         &get_unique_test_prefix(prefix),
         &get_test_access_point(arn, AccessPointType::ObjectLambda),
     )
@@ -152,7 +152,7 @@ async fn test_object_lambda_access_point(arn: bool, prefix: &str) {
 async fn test_multi_region_access_point() {
     let prefix = "test_MRAP";
     run_list_objects_test(
-        |region| EndpointConfig::new(region),
+        EndpointConfig::new,
         &get_unique_test_prefix(prefix),
         &get_test_access_point(true, AccessPointType::MultiRegion),
     )

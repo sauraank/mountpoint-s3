@@ -61,3 +61,6 @@ doctest = false
 
 [features]
 s3_tests = []
+fips_tests = []
+access_points_tests = []
+tansfer_accelerate_tests = []
