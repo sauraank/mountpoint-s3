@@ -38,7 +38,7 @@ async fn run_test<F: FnOnce(&str) -> EndpointConfig>(f: F, prefix: &str, bucket:
 #[test_case(AddressingStyle::Automatic, "test_default_addressing_style")]
 #[test_case(AddressingStyle::Path, "test_path_addressing_style")]
 #[tokio::test]
-async fn test_addressing_style_region(addressing_style: AddressingStyle, prefix: &str) {
+async fn test_addressing_style(addressing_style: AddressingStyle, prefix: &str) {
     run_test(
         |region| EndpointConfig::new(region).addressing_style(addressing_style),
         &get_unique_test_prefix(prefix),
@@ -49,7 +49,7 @@ async fn test_addressing_style_region(addressing_style: AddressingStyle, prefix:
 
 #[cfg(feature = "fips_tests")]
 #[tokio::test]
-async fn test_fips_mount_option() {
+async fn test_use_fips() {
     let prefix = get_unique_test_prefix("test_fips");
     run_test(
         |region| EndpointConfig::new(region).use_fips(true),
@@ -62,7 +62,7 @@ async fn test_fips_mount_option() {
 // Transfer acceleration do not work with path style
 #[cfg(feature = "tansfer_accelerate_tests")]
 #[tokio::test]
-async fn test_accelerate_mount_option() {
+async fn test_use_accelerate() {
     let prefix = get_unique_test_prefix("test_transfer_acceleration");
     run_test(
         |region| EndpointConfig::new(region).use_accelerate(true),
@@ -72,11 +72,11 @@ async fn test_accelerate_mount_option() {
     .await;
 }
 
-#[test_case(AddressingStyle::Automatic)]
-#[test_case(AddressingStyle::Path)]
+#[test_case(AddressingStyle::Automatic, "test_dual_stack")]
+#[test_case(AddressingStyle::Path, "test_dual_stack_path_style")]
 #[tokio::test]
-async fn test_addressing_style_dualstack_option(addressing_style: AddressingStyle) {
-    let prefix = get_unique_test_prefix("test_dual_stack");
+async fn test_addressing_style_dualstack_option(addressing_style: AddressingStyle, prefix: &str) {
+    let prefix = get_unique_test_prefix(prefix);
     run_test(
         |region| {
             EndpointConfig::new(region)
@@ -117,7 +117,7 @@ async fn test_single_region_access_point(addressing_style: AddressingStyle, arn:
     .await;
 }
 
-// For Object Labda Access Point, PutObject is not supported,
+// For Object Lambda Access Point, PutObject is not supported,
 // For multi region access points, Rust SDK is not supported. Hence different helper method for these tests.
 async fn run_list_objects_test<F: FnOnce(&str) -> EndpointConfig>(f: F, prefix: &str, bucket: &str) {
     let region = get_test_region();

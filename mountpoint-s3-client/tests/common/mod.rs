@@ -33,28 +33,20 @@ pub fn get_unique_test_prefix(test_name: &str) -> String {
     prefix
 }
 
+pub fn get_test_bucket() -> String {
+    std::env::var("S3_BUCKET_NAME").expect("Set S3_BUCKET_NAME to run integration tests")
+}
+
 pub fn get_test_client() -> S3CrtClient {
     let endpoint_config = EndpointConfig::new(&get_test_region());
     S3CrtClient::new(S3ClientConfig::new().endpoint_config(endpoint_config)).expect("could not create test client")
 }
 
 pub fn get_test_bucket_and_prefix(test_name: &str) -> (String, String) {
-    let bucket = std::env::var("S3_BUCKET_NAME").expect("Set S3_BUCKET_NAME to run integration tests");
-
-    // Generate a random nonce to make sure this prefix is truly unique
-    let nonce = OsRng.next_u64();
-
-    // Prefix always has a trailing "/" to keep meaning in sync with the S3 API.
-    let prefix = std::env::var("S3_BUCKET_TEST_PREFIX").unwrap_or(String::from("mountpoint-test/"));
-    assert!(prefix.ends_with('/'), "S3_BUCKET_TEST_PREFIX should end in '/'");
-
-    let prefix = format!("{prefix}{test_name}/{nonce}/");
+    let bucket = get_test_bucket();
+    let prefix = get_unique_test_prefix(test_name);
 
     (bucket, prefix)
-}
-
-pub fn get_test_bucket() -> String {
-    std::env::var("S3_BUCKET_NAME").expect("Set S3_BUCKET_NAME to run integration tests")
 }
 
 pub fn get_test_access_point(arn: bool, access_point_type: AccessPointType) -> String {
@@ -77,6 +69,7 @@ pub fn get_test_access_point(arn: bool, access_point_type: AccessPointType) -> S
             // Multi region accesspoints should only be accessed using their ARN
             // (since endpoint for alias needs to be in format `<mrap-alias>.accesspoint.s3-global.amazonaws.com`. But this endpoint could not be formed using
             // CRT endpoint resolver any bucket alias with '.' in it will be resolved in path style addressing. Similar is the case with CLI)
+            assert!(!arn);
             std::env::var("S3_MRAP_ARN").expect("Set S3_MRAP_ARN to run integration tests")
         }
     }
@@ -144,8 +137,7 @@ pub async fn get_mpu_count_for_key(
 #[tokio::test]
 async fn test_sdk_create_object() {
     let sdk_client = get_test_sdk_client().await;
-    let bucket = get_test_bucket();
-    let prefix = get_unique_test_prefix("test_sdk_create_object");
+    let (bucket, prefix) = get_test_bucket_and_prefix("test_sdk_create_object");
 
     let response = sdk_client
         .put_object()
