@@ -1,6 +1,7 @@
 use std::env;
 use std::fs::File;
 use std::io::{Read, Write};
+use std::os::fd::AsRawFd;
 use std::os::unix::prelude::FromRawFd;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -110,8 +111,9 @@ struct CliArgs {
 
     #[clap(
         long,
-        help = "Allow other non-root users to access file system",
-        help_heading = MOUNT_OPTIONS_HEADER
+        help = "Allow other users, including root, to access file system",
+        help_heading = MOUNT_OPTIONS_HEADER,
+        conflicts_with = "allow_root"
     )]
     pub allow_other: bool,
 
@@ -307,6 +309,12 @@ fn main() -> anyhow::Result<()> {
                             .write(&status_success)
                             .context("Failed to write data to the pipe")?;
                         drop(pipe_file);
+
+                        // Logging is set up and the mount succeeded, so we can hang up
+                        // stdin/out/err now to cleanly daemonize ourselves
+                        nix::unistd::close(std::io::stdin().as_raw_fd()).context("couldn't close stdin")?;
+                        nix::unistd::close(std::io::stdout().as_raw_fd()).context("couldn't close stdout")?;
+                        nix::unistd::close(std::io::stderr().as_raw_fd()).context("couldn't close stderr")?;
 
                         session.join().context("failed to join session")?;
                     }

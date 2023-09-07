@@ -18,7 +18,7 @@ Mountpoint uses the same [credentials configuration options](https://docs.aws.am
 
 We recommend you use short-term AWS credentials whenever possible. Mountpoint supports several options for short-term AWS credentials:
 * When running Mountpoint on an Amazon EC2 instance, you can [associate an IAM role with your instance](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/iam-roles-for-amazon-ec2.html) using an instance profile, and Mountpoint will automatically assume that IAM role.
-* When running Mountpoint in an Amazon ECS task, you can similarly [associate an IAM role with the task](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-iam-roles.html) for Mountpoint to automatically assume. 
+* When running Mountpoint in an Amazon ECS task, you can similarly [associate an IAM role with the task](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-iam-roles.html) for Mountpoint to automatically assume.
 * Otherwise, you can [acquire temporary AWS credentials for an IAM role](https://docs.aws.amazon.com/cli/latest/userguide/cli-authentication-short-term.html) from the AWS Console or with the `aws sts assume-role` AWS CLI command, and store them in the `~/.aws/credentials` file.
 
 If you need to use long-term AWS credentials, you can [store them in the configuration and credentials files](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html) in `~/.aws`, or [specify them with environment variables](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html) (`AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`).
@@ -130,7 +130,7 @@ In most scenarios, Mountpoint automatically infers the appropriate Amazon S3 end
 
 ### Data encryption
 
-Amazon S3 supports a number of [server-side encryption types](https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingEncryption.html). Mountpoint supports reading objects that are encrypted with Amazon S3 managed keys (SSE-S3), with AWS KMS keys (SSE-KMS), or with dual-layer encryption with AWS KMS keys (DSSE-KMS). It does not currently support reading objects encrypted with customer-provided keys (SSE-C). For new objects written by Mountpoint, Amazon S3 automatically applies server-side encryption with Amazon S3 managed keys (SSE-S3), and Mountpoint does not support using other encryption types.
+Amazon S3 supports a number of [server-side encryption types](https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingEncryption.html). Mountpoint supports reading and writing to buckets that are configured with Amazon S3 managed keys (SSE-S3), with AWS KMS keys (SSE-KMS), or with dual-layer encryption with AWS KMS keys (DSSE-KMS) as the default encryption method. It does not currently support reading objects encrypted with customer-provided keys (SSE-C). Mountpoint does not allow further configuring encryption, and you cannot encrypt new objects written with Mountpoint using a different encryption setting than the bucket's default.
 
 Mountpoint does not support client-side encryption using the Amazon S3 Encryption Client.
 
@@ -164,7 +164,7 @@ Amazon S3 offers a [range of storage classes](https://aws.amazon.com/s3/storage-
 
 For the full list of possible storage classes, see the [PutObject documentation](https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObject.html#AmazonS3-PutObject-request-header-StorageClass) in the Amazon S3 User Guide.
 
-Mountpoint supports reading existing objects from your S3 bucket when they are stored in any instant-retrieval storage class. You cannot use Mountpoint to read objects stored in the S3 Glacier Flexible Retrieval or S3 Glacier Deep Archive storage classes, or the Archive Access or Deep Archive Access tiers of S3 Intelligent-Tiering. This limitation exists even if you have restored the object. However, you can still use Mountpoint to write new objects into these storage classes or S3 Intelligent-Tiering.
+Mountpoint supports reading existing objects from your S3 bucket when they are stored in any instant-retrieval storage class. You cannot use Mountpoint to read objects stored in the S3 Glacier Flexible Retrieval or S3 Glacier Deep Archive storage classes, or the Archive Access or Deep Archive Access tiers of S3 Intelligent-Tiering, unless they've been [restored](https://docs.aws.amazon.com/AmazonS3/latest/userguide/restoring-objects.html). You can use Mountpoint to write new objects into these storage classes or S3 Intelligent-Tiering.
 
 ### File and directory permissions
 

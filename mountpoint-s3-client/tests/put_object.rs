@@ -74,7 +74,7 @@ async fn test_put_object_multi_part(client: &impl ObjectClient, bucket: &str, pr
 
     let key = format!("{prefix}hello");
 
-    let mut contents = vec![0u8; 32];
+    let mut contents = [0u8; 32];
     rng.fill(&mut contents[..]);
 
     let mut request = client
@@ -211,7 +211,7 @@ async fn test_put_checksums() {
         .get_object_attributes()
         .bucket(bucket)
         .key(key)
-        .object_attributes(aws_sdk_s3::model::ObjectAttributes::ObjectParts)
+        .object_attributes(aws_sdk_s3::types::ObjectAttributes::ObjectParts)
         .send()
         .await
         .unwrap();
@@ -319,7 +319,7 @@ async fn test_put_object_storage_class(storage_class: &str) {
         .get_object_attributes()
         .bucket(bucket)
         .key(key)
-        .object_attributes(aws_sdk_s3::model::ObjectAttributes::StorageClass)
+        .object_attributes(aws_sdk_s3::types::ObjectAttributes::StorageClass)
         .send()
         .await
         .unwrap();
