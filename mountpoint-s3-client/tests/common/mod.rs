@@ -73,7 +73,7 @@ pub fn get_test_access_point(arn: bool, access_point_type: AccessPointType) -> S
             // Multi region accesspoints should only be accessed using their ARN
             // (since endpoint for alias needs to be in format `<mrap-alias>.accesspoint.s3-global.amazonaws.com`. But this endpoint could not be formed using
             // CRT endpoint resolver any bucket alias with '.' in it will be resolved in path style addressing. Similar is the case with CLI)
-            assert!(!arn);
+            assert!(arn);
             std::env::var("S3_MRAP_ARN").expect("Set S3_MRAP_ARN to run integration tests")
         }
     }

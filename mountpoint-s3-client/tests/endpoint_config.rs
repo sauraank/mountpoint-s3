@@ -133,6 +133,7 @@ async fn run_list_objects_test<F: FnOnce(&str) -> EndpointConfig>(f: F, prefix: 
 
 #[cfg(feature = "s3_tests")]
 #[test_case(false, "test_OLAP_alias")]
+#[test_case(true, "test_OLAP_ARN")]
 // Path-style addressing is not supported for Access points
 // Keeping the option of ARN, so that we can add ARN test case for object lambda access point later.
 #[tokio::test]
